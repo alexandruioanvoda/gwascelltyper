@@ -18,7 +18,8 @@
 #'
 #' @import doParallel
 #' @import data.table
-#' @import R.utils
+#' @importFrom R.utils gzip
+#' @importFrom R.utils compressFile
 #' @importFrom utils write.table
 #'
 #' @return Dataframe
@@ -203,7 +204,8 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
 #' @import parallel
 #' @import doParallel
 #' @import data.table
-#' @import R.utils
+#' @importFrom R.utils gzip
+#' @importFrom R.utils compressFile
 #' @import foreach
 #' @importFrom foreach foreach
 #'
@@ -217,7 +219,6 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
                                              bim_prefix = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_plink/1000G.",toupper(population),".QC."),
                                              ref_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_baseline/baseline."),
                                              w_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_weights_hm3_no_hla/weights.")) {
-  require(doParallel)
   if (is.null(gene_sets)) {stop("What gene sets?")}
   if (is.null(sumstats_file)) {stop("What sumstats file?")}
   if (!file.exists(sumstats_file)) {stop("Sumstats file does not exist at provided path.")}
@@ -420,7 +421,8 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 #'
 #' @import doParallel
 #' @import data.table
-#' @import R.utils
+#' @importFrom R.utils gzip
+#' @importFrom R.utils compressFile
 #' @importFrom utils read.table
 #' @importFrom utils write.table
 #'
@@ -581,7 +583,6 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
                                                gene_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/NCBIgenes2013_", gene_nomenclature,".bed.gz"),
                                                snp_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/TGP2011.bed.gz"),
                                                null_snps = paste0(system.file(package = "gwascelltyper"),"/extdata/Lango2010.txt.gz")) {
-  require(R.utils)
   if (is.null(gene_sets)) {stop("What gene score matrix?")}
   if (is.null(sumstats_file)) {stop("What sumstats file?")}
   if (is.null(gene_intervals)) {stop("What SNPsea gene_intervals param?")}
@@ -647,7 +648,7 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
   utils::write.table(gene_set_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir, "/gene_set_matrix.gct"))
   # The line underneath adds a necessary header to our file
   system(paste0("( echo -e '#1.2\n",paste(nrow(gene_set_matrix), ncol(gene_set_matrix)-2, sep = "\t"),"'; cat ",output_dir,"/gene_set_matrix.gct) > ",output_dir,"/tmp && mv ",output_dir,"/tmp ",output_dir,"/gene_set_matrix.gct"))
-  gzip(paste0(output_dir,"/gene_set_matrix.gct"), destname=paste0(output_dir,"/gene_set_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
+  R.utils::gzip(paste0(output_dir,"/gene_set_matrix.gct"), destname=paste0(output_dir,"/gene_set_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
 
 
   cat("Making sure SNPsea is chmod +x.\n")
@@ -855,7 +856,6 @@ compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, o
                                              gene_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/NCBIgenes2013_", gene_nomenclature,".bed.gz"),
                                              snp_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/TGP2011.bed.gz"),
                                              null_snps = paste0(system.file(package = "gwascelltyper"),"/extdata/Lango2010.txt.gz")) {
-  require(R.utils)
   if (is.null(gene_score_matrix)) {stop("What gene score matrix?")}
   if (any(is.na(gene_score_matrix))) {stop("Gene score matrix contains NAs. This input is not supported.")}
   if (is.null(sumstats_file)) {stop("What sumstats file?")}
@@ -904,7 +904,7 @@ compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, o
   print("Writing the SNPsea GCT file.")
   utils::write.table(gene_score_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir,"/gene_score_matrix.gct"))
   system(paste0("( echo -e '#1.2\n",paste(nrow(gene_score_matrix), ncol(gene_score_matrix)-2, sep = "\t"),"'; cat ",output_dir,"/gene_score_matrix.gct) > ",output_dir,"/tmp && mv ",output_dir,"/tmp ",output_dir,"/gene_score_matrix.gct"))
-  gzip(paste0(output_dir,"/gene_score_matrix.gct"), destname=paste0(output_dir,"/gene_score_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
+  R.utils::gzip(paste0(output_dir,"/gene_score_matrix.gct"), destname=paste0(output_dir,"/gene_score_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
 
 
   cat("Making sure SNPsea is chmod +x.\n")

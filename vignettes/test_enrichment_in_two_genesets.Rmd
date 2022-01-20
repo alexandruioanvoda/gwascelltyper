@@ -1,0 +1,51 @@
+---
+title: "Test enrichment in two genesets"
+author: "Alexandru Ioan Voda"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Test enrichment in two genesets}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+
+## Downloading example GWAS summary statistics
+
+First, navigate in R to whichever folder you want to run this analysis in (e.g. where you'd like temporary data to be downloaded in).
+
+This snippet will download and decompress an archive containing GWAS summary statistics for Crohn's disease in our current directory:
+```{r eval=FALSE}
+download.file(url = "ftp://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/deLangeKM_28067908_GCST004132/cd_build37_40266_20161107.txt.gz",
+              destfile = paste0(getwd(), "/cd_build37_40266.txt.gz"))
+library(R.utils)
+gunzip("cd_build37_40266.txt.gz", remove=TRUE)
+```
+
+Now, you should have a file called `cd_build37_40266.txt` in your working directory (`getwd()`).
+
+## Formatting it for MAGMA
+
+To preview how a correct & minimal summary statistics file would look like for MAGMA, run:
+```{r eval=TRUE}
+library("GWASCellTyper")
+munge_sumstats_for_MAGMA(preview=TRUE)
+```
+
+Now, let's attempt to get them formatted for our analysis:
+```{r eval=FALSE}
+library("GWASCellTyper")
+
+path = paste0(getwd(), "/cd_build37_40266.txt") # it could also be "/path/to/your/GWASsumstats.txt"
+
+munge_sumstats_for_MAGMA(sumstats_raw = path)
+
+file.exists(paste0(path, "_processed.sumstats"))
+```

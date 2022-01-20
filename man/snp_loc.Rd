@@ -5,7 +5,7 @@
 \alias{snp_loc}
 \title{SNP location data}
 \format{
-An object of class \code{"data frame"}; see \code{\link[data.frame]{data.frame}}.
+An object of class \code{"data frame"}.
 }
 \usage{
 data(snp_loc)

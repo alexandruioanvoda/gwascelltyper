@@ -5,7 +5,7 @@
 \alias{all_hgnc_wtEntrez}
 \title{Map from Entrez to HGNC}
 \format{
-An object of class \code{"data frame"}; see \code{\link[data.frame]{data.frame}}.
+An object of class \code{"data frame"}.
 }
 \usage{
 data(all_hgnc_wtEntrez)

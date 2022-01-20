@@ -7,6 +7,7 @@
 #' @param preview Show ideal MAGMA sumstats file then exit. If false (default), it proceeds to the processing.
 #'
 #' @importFrom utils data
+#' @import data.table
 #'
 #' @return Path
 #'
@@ -24,7 +25,6 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
     If the SNPs have variable sample size (e.g. sumstats come from meta-analysis), then that can be stored as a column called N, with integers.\n")
     return(NULL)
   }
-  require(data.table)
   # This is a modified version (ugly) of the MAGMA.Celltyping package sumstats-munging functions (ugly as well),
   # that works no matter which version of sed & awk is used. It overwrites the input path, beware.
   if (is.null(sumstats_raw)) {
@@ -92,7 +92,7 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
       sumstats <- sumstats[-no_rsids,]
 
       # Load genome builds and ask which one of these the SNPs are from
-      data("snp_loc")
+      snp_loc <- gwascelltyper::snp_loc
       genomebuild <- ask_genome_build()
 
       sumstats_norsid <- sumstats_norsid[, !"SNP"]
@@ -132,6 +132,10 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
 #' @param preview Show ideal LDSC sumstats file then exit. If false (default), it proceeds to the processing.
 #'
 #' @return Path
+#'
+#' @importFrom R.utils compressFile
+#' @importFrom utils read.table
+#' @importFrom utils write.table
 #'
 #' @export
 munge_sumstats_for_LDSC_from_MAGMA <- function(sumstats_magma = NULL, sumstats_munged = paste0(sumstats_magma,"_processed.sumstats.gz"),
@@ -190,8 +194,6 @@ munge_sumstats_for_LDSC_from_MAGMA <- function(sumstats_magma = NULL, sumstats_m
     non-rsID-columns (see https://github.com/bulik/ldsc/issues/170#issue-507105766), like this:
     SNP	A1	A2	Z	N\nrs3094315\nrs3131972\nrs3131969
     This following operation will eliminate this minor problem by taking out such missing-beta rows.\n")
-    require(R.utils)
-    require(data.table)
     sumstats <- read.table(file = paste0(intermed_file, ".sumstats.gz"), header = TRUE, stringsAsFactors = FALSE, fill = TRUE)
     sumstats <- sumstats[which(sumstats[,2]!=""),]
     sumstats[,which(colnames(sumstats)=="N")] <- as.integer(sumstats[,which(colnames(sumstats)=="N")])
@@ -218,6 +220,8 @@ munge_sumstats_for_LDSC_from_MAGMA <- function(sumstats_magma = NULL, sumstats_m
 #' @param preview Show ideal SNPsea sumstats file then exit. If false (default), it proceeds to the processing.
 #'
 #' @return Path
+#' 
+#' @import data.table
 #'
 #' @export
 munge_sumstats_for_SNPSEA_from_MAGMA <- function(sumstats_magma = NULL, sumstats_munged = paste0(sumstats_magma,"_processed.sumstats"), preview = FALSE) {
@@ -231,7 +235,6 @@ munge_sumstats_for_SNPSEA_from_MAGMA <- function(sumstats_magma = NULL, sumstats
     Where the P-value column needs to be in the Ne-NN format, where N is a digit.\n")
     return(NULL)
   }
-  require(data.table)
   file.copy(from = sumstats_magma, to = sumstats_munged)
   cat("Munging sumstats function for SNPSEA is still in development. Guideline for manual formatting below.
   # head of Red_blood_cell_count-Harst2012-45_SNPs.gwas

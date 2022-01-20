@@ -5,7 +5,7 @@
 \alias{standard_sumstats_column_headers}
 \title{Standard summstats column headers}
 \format{
-An object of class \code{"data frame"}; see \code{\link[data.frame]{data.frame}}.
+An object of class \code{"data frame"}.
 }
 \usage{
 data(standard_sumstats_column_headers)

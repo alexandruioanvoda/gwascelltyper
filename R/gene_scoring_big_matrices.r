@@ -249,6 +249,8 @@ matrix_missingness <- function(mat, col_max_miss = 0.1, row_max_miss = 0.1, elim
 #' @param row_max_miss Maximum missingness (is.na) for the row (genes), between 0 and 1. Default is 10\% (row_max_miss=0.1). If a row contains more than 10\% NAs, it is eliminated from further analyses.
 #'
 #' @return Dataframe
+#' 
+#' @import doParallel
 #'
 #' @export
 compute_t_stat_matrix_environ <- function(obj, number_of_threads = 1, col_max_miss = 0.1, row_max_miss = 0.1) {
@@ -262,9 +264,8 @@ compute_t_stat_matrix_environ <- function(obj, number_of_threads = 1, col_max_mi
   if (any(is.na(obj$exp))) {exp_environ_missingness(obj)}
   sanity_check_for_exp_and_annot_environ(obj)
   cat(dim(obj$exp), "dims\n")
-
-  require(doParallel)
-  registerDoParallel(cores=number_of_threads)
+  
+  doParallel::registerDoParallel(cores=number_of_threads)
   print("Computing t statistic for each gene per each cell cluster...")
   nrow_exp <- nrow(obj$exp) # Speeds up the printing processes if matrix has dozens of thousands of rows
   t_stats <- matrix(NA, nrow = nrow_exp, ncol = length(unique(obj$annot[,2])))
@@ -317,7 +318,6 @@ compute_t_stat_matrix_environ <- function(obj, number_of_threads = 1, col_max_mi
 #'
 #' @export
 generate_celltype_data_environ <- function(obj, number_of_threads = 1) {
-  require("parallel")
   cat("Starting multithreading with", number_of_threads, "cores.\n")
   cl <- parallel::makeCluster(number_of_threads)
 

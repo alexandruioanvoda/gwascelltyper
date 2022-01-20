@@ -29,7 +29,7 @@ List (of two vectors: bad row & column indexes)
 \description{
 Warning: this function modifies any object it is given. This function does two things at once:
 1. automatically removes completely-NA rows and columns.
-2. finds out if some rows or columns have more missingness than a threshold (default = 0.1 (otherwise written, 10%)), and eliminates them (if requested).
+2. finds out if some rows or columns have more missingness than a threshold (default = 0.1 (otherwise written, 10\%)), and eliminates them (if requested).
 }
 \details{
 It then returns a list of two vectors, containing the bad row & column indexes respectively.

@@ -6,7 +6,7 @@
 #'
 #' @usage data(standard_sumstats_column_headers)
 #'
-#' @format An object of class \code{"data frame"}; see \code{\link[data.frame]{data.frame}}.
+#' @format An object of class \code{"data frame"}.
 #'
 #' @keywords standard sumstats column headers gwas
 #'
@@ -28,7 +28,7 @@
 #'
 #' @usage data(snp_loc)
 #'
-#' @format An object of class \code{"data frame"}; see \code{\link[data.frame]{data.frame}}.
+#' @format An object of class \code{"data frame"}.
 #'
 #' @keywords snp location gwas
 #'
@@ -49,7 +49,7 @@
 #'
 #' @usage data(all_hgnc_wtEntrez)
 #'
-#' @format An object of class \code{"data frame"}; see \code{\link[data.frame]{data.frame}}.
+#' @format An object of class \code{"data frame"}.
 #'
 #' @keywords gene map entrez hgnc
 #'

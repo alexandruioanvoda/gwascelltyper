@@ -12,8 +12,6 @@
 #'
 #' @export
 download_dependencies <- function(population = "eur", address = paste0(system.file(package="gwascelltyper"), "/extdata/")) {
-  require(data.table)
-  require(R.utils)
   if (!population %in% c("afr", "amr", "eas", "eur", "sas", "subpop")) {
     stop("Population options: afr amr eas eur sas subpop.", population, "is not a publicly available choice for said packages yet. Please consult the MAGMA, LDSC & SNPsea websites to create your own LD reference data.")
   } else {
