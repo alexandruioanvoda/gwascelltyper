@@ -23,25 +23,21 @@ First, navigate in R to whichever folder you want to run this analysis in (e.g. 
 
 This snippet will download and decompress an archive containing GWAS summary statistics for Crohn's disease in our current directory:
 ```{r eval=FALSE}
-download.file(url = "ftp://ftp.ebi.ac.uk/pub/databases/gwas/summary_statistics/deLangeKM_28067908_GCST004132/cd_build37_40266_20161107.txt.gz",
-              destfile = paste0(getwd(), "/cd_build37_40266.txt.gz"))
-library(R.utils)
-gunzip("cd_build37_40266.txt.gz", remove=TRUE)
-```
+print("hi")
 
-Now, you should have a file called `cd_build37_40266.txt` in your working directory (`getwd()`).
+```
 
 ## Formatting it for MAGMA
 
 To preview how a correct & minimal summary statistics file would look like for MAGMA, run:
 ```{r eval=TRUE}
-library("GWASCellTyper")
+library(gwascelltyper)
 munge_sumstats_for_MAGMA(preview=TRUE)
 ```
 
 Now, let's attempt to get them formatted for our analysis:
 ```{r eval=FALSE}
-library("GWASCellTyper")
+library(gwascelltyper)
 
 path = paste0(getwd(), "/cd_build37_40266.txt") # it could also be "/path/to/your/GWASsumstats.txt"
 
