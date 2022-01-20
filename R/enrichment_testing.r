@@ -16,6 +16,11 @@
 #' @param w_ld_chr Filename prefix for file with LD Scores with sum r^2 taken over SNPs included in the regression. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz. LDSC will read files split into 22 chromosomes in the same manner as --ref-ld-chr.
 #' @param ld_wind_cm Specify the window size to be used for estimating LD Scores in units of centiMorgans (cM). Default = 1.
 #'
+#' @import doParallel
+#' @import data.table
+#' @import R.utils
+#' @importFrom utils write.table
+#'
 #' @return Dataframe
 #'
 #' @export
@@ -26,10 +31,6 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
                                                        bim_prefix = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_plink/1000G.",toupper(population),".QC."),
                                                        ref_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_baseline/baseline."),
                                                        w_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_weights_hm3_no_hla/weights.")) {
-  # Libraries
-  require(doParallel)
-  require(data.table)
-  require(R.utils)
   # Checks
   if (is.null(gene_sets)) {stop("What gene sets?")}
   if (is.null(sumstats_file)) {stop("What sumstats file?")}
@@ -96,8 +97,7 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
     length(gene_sets[[i]]) <- n
   }
   gene_sets <- do.call(cbind, gene_sets)
-  write.table(gene_sets, file = geneset_file, quote = FALSE, sep = "\t", na = "", row.names = FALSE, col.names = FALSE)
-
+  utils::write.table(gene_sets, file = geneset_file, quote = FALSE, sep = "\t", na = "", row.names = FALSE, col.names = FALSE)
 
   cat("Making a thin-annot of all gene-sets (one per column), per each chromosome.\n")
   command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=", number_of_threads," MKL_NUM_THREADS=", number_of_threads,
@@ -116,7 +116,7 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
   registerDoParallel(cores=number_of_threads)
 
 
-  foreach(i=1:22, .options.snow=list(preschedule=TRUE)) %do% {
+  foreach::foreach(i=1:22, .options.snow=list(preschedule=TRUE)) %do% {
     gc()
     command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", ldsc_path, "ldsc.py --l2 --bfile ",
                       bim_prefix, as.character(i), " --ld-wind-cm ", ld_wind_cm,
@@ -126,17 +126,17 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
     system(command = command)
 
     cat("Reading in the LD score, M & M_5_50 files.\n")
-    merged_ld <- read.table(file = paste0(output_dir, "/merged_ld_scores.", i, ".l2.ldscore.gz"), header = TRUE)
-    merged_m <- read.table(file = paste0(output_dir, "/merged_ld_scores.", i, ".l2.M"), header = FALSE)
-    merged_m_5_50 <- read.table(file = paste0(output_dir, "/merged_ld_scores.", i, ".l2.M_5_50"), header = FALSE)
+    merged_ld <- utils::read.table(file = paste0(output_dir, "/merged_ld_scores.", i, ".l2.ldscore.gz"), header = TRUE)
+    merged_m <- utils::read.table(file = paste0(output_dir, "/merged_ld_scores.", i, ".l2.M"), header = FALSE)
+    merged_m_5_50 <- utils::read.table(file = paste0(output_dir, "/merged_ld_scores.", i, ".l2.M_5_50"), header = FALSE)
 
     cat("Separating the LD score, M & M_5_50 files.\n")
     for (j in 1:(ncol(merged_ld)-3)) {
       de_merged <- merged_ld[,c(1,2,3,j+3)]
-      write.table(x = de_merged, file = paste0(output_dir, "/geneset.", j, ".", i, ".l2.ldscore"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-      gzip(paste0(output_dir, "/geneset.", j, ".", i, ".l2.ldscore"), destname=paste0(output_dir, "/geneset.", j, ".", i, ".l2.ldscore.gz"), overwrite=TRUE, remove=TRUE)
-      write.table(x = merged_m[,j], file = paste0(output_dir, "/geneset.", j, ".", i, ".l2.M"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
-      write.table(x = merged_m_5_50[,j], file = paste0(output_dir, "/geneset.", j, ".", i, ".l2.M_5_50"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+      utils::write.table(x = de_merged, file = paste0(output_dir, "/geneset.", j, ".", i, ".l2.ldscore"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+      R.utils::gzip(paste0(output_dir, "/geneset.", j, ".", i, ".l2.ldscore"), destname=paste0(output_dir, "/geneset.", j, ".", i, ".l2.ldscore.gz"), overwrite=TRUE, remove=TRUE)
+      utils::write.table(x = merged_m[,j], file = paste0(output_dir, "/geneset.", j, ".", i, ".l2.M"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+      utils::write.table(x = merged_m_5_50[,j], file = paste0(output_dir, "/geneset.", j, ".", i, ".l2.M_5_50"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
     }
   }
 
@@ -169,7 +169,7 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
 
 
   # Here we build the results dataframe for plotting.
-  results <- read.table(paste0(output_dir, "/ldsc_final_output.cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
+  results <- utils::read.table(paste0(output_dir, "/ldsc_final_output.cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
   colnames(results)[4] <- "P_value"
 
 
@@ -200,6 +200,13 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
 #' @param w_ld_chr Filename prefix for file with LD Scores with sum r^2 taken over SNPs included in the regression. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz. LDSC will read files split into 22 chromosomes in the same manner as --ref-ld-chr.
 #' @param ld_wind_cm Specify the window size to be used for estimating LD Scores in units of centiMorgans (cM). Default = 1.
 #'
+#' @import parallel
+#' @import doParallel
+#' @import data.table
+#' @import R.utils
+#' @import foreach
+#' @importFrom foreach foreach
+#'
 #' @return Dataframe
 #'
 #' @export
@@ -210,6 +217,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
                                              bim_prefix = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_plink/1000G.",toupper(population),".QC."),
                                              ref_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_baseline/baseline."),
                                              w_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_weights_hm3_no_hla/weights.")) {
+  require(doParallel)
   if (is.null(gene_sets)) {stop("What gene sets?")}
   if (is.null(sumstats_file)) {stop("What sumstats file?")}
   if (!file.exists(sumstats_file)) {stop("Sumstats file does not exist at provided path.")}
@@ -269,12 +277,11 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 
   print("LDSC consumes a lot of RAM memory, so we are calling garbage collection in R now, before proceeding to the analysis.")
   gc()
-  require(doParallel)
-  registerDoParallel(cores=number_of_threads)
+  doParallel::registerDoParallel(cores=number_of_threads)
 
 
   print("Writing lists of genes to files and making thin-annots for each gene set...")
-  foreach(i=1:(length(gene_sets)-1), .options.snow=list(preschedule=TRUE)) %dopar% {
+  foreach::foreach(i=1:(length(gene_sets)-1), .options.snow=list(preschedule=TRUE)) %dopar% {
     gc()
     geneset_file <- paste0(output_dir, "/genes_", gsub(" ", "_", names(gene_sets)[i]), "_list.txt") # The gsub command is the cell name
     con <- file(geneset_file)
@@ -300,7 +307,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
   writeLines(gene_sets[[length(gene_sets)]], con) # gene_sets[[length(gene_sets)]] is the control set (vector with all genes)
   close(con)
   # Make thin-annot for control too
-  foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
+  foreach::foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
     gc()
     command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", ldsc_path, "make_annot.py --gene-set-file ",
                       geneset_file, " --gene-coord-file ", gene_coord,
@@ -328,7 +335,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 
 
   print("Computing LD for each gene-set / each chromosome.")
-  foreach(i=1:(length(gene_sets)-1), .options.snow=list(preschedule=TRUE)) %dopar% {
+  foreach::foreach(i=1:(length(gene_sets)-1), .options.snow=list(preschedule=TRUE)) %dopar% {
     gc()
     for (j in seq(from = 1, to = 22, by = 1)) {
       command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", ldsc_path, "ldsc.py --l2 --bfile ",
@@ -348,7 +355,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 
   # Compute LD for the control too
   print("Compute LD for the control too")
-  foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
+  foreach::foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
     gc()
     command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", ldsc_path, "ldsc.py --l2 --bfile ",
                       bim_prefix, as.character(j), " --ld-wind-cm ", ld_wind_cm,
@@ -384,7 +391,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 
 
   # Here we build the results dataframe for plotting.
-  results <- read.table(paste0(output_dir, "/ldsc_final_output.cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
+  results <- utils::read.table(paste0(output_dir, "/ldsc_final_output.cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
   colnames(results)[4] <- "P_value"
 
 
@@ -410,6 +417,12 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 #' @param gwas_sample_size Sample size of GWAS.
 #' @param genome_ref_path Path to genome references for MAGMA (default = packageLocation/extdata/magma/g1000_eur).
 #' @param magma_path Path to MAGMA executable (default is in package extdata folder, where download_dependencies() should store it).
+#'
+#' @import doParallel
+#' @import data.table
+#' @import R.utils
+#' @importFrom utils read.table
+#' @importFrom utils write.table
 #'
 #' @return Dataframe
 #'
@@ -501,7 +514,7 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, output_d
   }
   geneCovarFile = tempfile(pattern = "geneCovarFile", tmpdir = output_dir)
   cat("Writing gene_covar file to", geneCovarFile, "\n")
-  write.table(geneCovarFile_contents, file = geneCovarFile, quote = FALSE, row.names = FALSE, sep = "\t", col.names = FALSE)
+  utils::write.table(geneCovarFile_contents, file = geneCovarFile, quote = FALSE, row.names = FALSE, sep = "\t", col.names = FALSE)
 
 
   cat("Making sure MAGMA is chmod +x.\n")
@@ -515,7 +528,7 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, output_d
   system(magma_cmd)
 
   # Read and properly format the results (e.g. missing name column)
-  res = read.table(paste0(output_dir,"/",analysis_name, ".gsa.out"), stringsAsFactors = FALSE, header = TRUE)
+  res = utils::read.table(paste0(output_dir,"/",analysis_name, ".gsa.out"), stringsAsFactors = FALSE, header = TRUE)
   if ("FULL_NAME" %in% colnames(res)) {
     res <- res[,-which(colnames(res) == "VARIABLE")]
     colnames(res)[which(colnames(res)=="FULL_NAME")] <- "Name"
@@ -554,6 +567,10 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, output_d
 #' @param min_observations Stop testing a column in --gene-matrix after observing this many null SNP sets with specificity scores greater or equal to those obtained with the SNPs in --snps. Increase this value to obtain more accurate p-values (default: 25).
 #' @param max_iterations Maximum number of null SNP sets tested against each column in --gene-matrix. Increase this value to resolve small p-values (default: 10000).
 #' @param gene_nomenclature Type of gene names.
+#' @param snpsea_path Path to the SNPsea executable
+#'
+#' @importFrom utils read.csv
+#' @importFrom utils write.table
 #'
 #' @return Dataframe
 #'
@@ -627,7 +644,7 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
 
 
   print("Writing the SNPsea GCT file.")
-  write.table(gene_set_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir, "/gene_set_matrix.gct"))
+  utils::write.table(gene_set_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir, "/gene_set_matrix.gct"))
   # The line underneath adds a necessary header to our file
   system(paste0("( echo -e '#1.2\n",paste(nrow(gene_set_matrix), ncol(gene_set_matrix)-2, sep = "\t"),"'; cat ",output_dir,"/gene_set_matrix.gct) > ",output_dir,"/tmp && mv ",output_dir,"/tmp ",output_dir,"/gene_set_matrix.gct"))
   gzip(paste0(output_dir,"/gene_set_matrix.gct"), destname=paste0(output_dir,"/gene_set_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
@@ -680,6 +697,8 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
 #' @param gwas_sample_size Sample size of GWAS.
 #' @param genome_ref_path Path to genome references for MAGMA.
 #' @param magma_path Path to MAGMA executable (default is in package extdata folder, where download_dependencies() should store it).
+#'
+#' @importFrom utils write.table
 #'
 #' @return Dataframe
 #'
@@ -766,7 +785,7 @@ compute_MAGMA_enrichment_linear <- function(gene_score_matrix, sumstats_file, ou
   cat("Generating gene_covars.\n")
   geneCovarFile = tempfile(pattern = "geneCovarFile", tmpdir = output_dir, fileext = ".txt")
   cat("Writing gene_covar file for MAGMA.\n")
-  write.table(gene_score_matrix, file = geneCovarFile, quote = FALSE, row.names = FALSE, sep = "\t")
+  utils::write.table(gene_score_matrix, file = geneCovarFile, quote = FALSE, row.names = FALSE, sep = "\t")
 
 
   cat("Making sure MAGMA is chmod +x.\n")
@@ -780,7 +799,7 @@ compute_MAGMA_enrichment_linear <- function(gene_score_matrix, sumstats_file, ou
 
 
   # Read and properly format the results (e.g. missing name column)
-  res = read.table(paste0(output_dir,"/linear_",analysis_name, ".gsa.out"), stringsAsFactors = FALSE, header = TRUE)
+  res = utils::read.table(paste0(output_dir,"/linear_",analysis_name, ".gsa.out"), stringsAsFactors = FALSE, header = TRUE)
   if ("FULL_NAME" %in% colnames(res)) {
     res <- res[,-which(colnames(res) == "VARIABLE")]
     colnames(res)[which(colnames(res)=="FULL_NAME")] <- "Name"
@@ -821,6 +840,11 @@ compute_MAGMA_enrichment_linear <- function(gene_score_matrix, sumstats_file, ou
 #' @param min_observations Stop testing a column in --gene-matrix after observing this many null SNP sets with specificity scores greater or equal to those obtained with the SNPs in --snps. Increase this value to obtain more accurate p-values (default: 25).
 #' @param max_iterations Maximum number of null SNP sets tested against each column in --gene-matrix. Increase this value to resolve small p-values (default: 10000).
 #' @param gene_nomenclature Type of gene names.
+#' @param snpsea_path Path to the SNPsea executable
+#'
+#' @importFrom utils read.csv
+#' @importFrom utils write.table
+#' @importFrom R.utils gzip
 #'
 #' @return Dataframe
 #'
@@ -878,7 +902,7 @@ compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, o
 
 
   print("Writing the SNPsea GCT file.")
-  write.table(gene_score_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir,"/gene_score_matrix.gct"))
+  utils::write.table(gene_score_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir,"/gene_score_matrix.gct"))
   system(paste0("( echo -e '#1.2\n",paste(nrow(gene_score_matrix), ncol(gene_score_matrix)-2, sep = "\t"),"'; cat ",output_dir,"/gene_score_matrix.gct) > ",output_dir,"/tmp && mv ",output_dir,"/tmp ",output_dir,"/gene_score_matrix.gct"))
   gzip(paste0(output_dir,"/gene_score_matrix.gct"), destname=paste0(output_dir,"/gene_score_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
 
@@ -922,7 +946,7 @@ compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, o
 #'
 #' Compute GWAS enrichment in discrete lists of genes with MAGMA.
 #'
-#' @param gwas_sumstats_path Path to summary statistics file.
+#' @param sumstats_file Path to summary statistics file.
 #' @param upstream_kb Default = 10
 #' @param downstream_kb Default = 1.5
 #' @param N Default = NULL
@@ -985,14 +1009,16 @@ map_SNPs_to_genes_for_MAGMA <- function (sumstats_file, upstream_kb = 10, downst
 #'
 #' @param path Path of summary statistics file.
 #'
+#' @importFrom utils data
+#'
 #' @return Character
 #'
 #' @export
 get_genomebuild_for_sumstats <- function (path) {
-  topLines = read.table(path, nrows = 30000, header = TRUE, stringsAsFactors = FALSE)
+  topLines = utils::read.table(path, nrows = 30000, header = TRUE, stringsAsFactors = FALSE)
   topSNPS = topLines$SNP
   topLOCs = sprintf("%s-%s-%s", topLines$SNP, topLines$CHR, topLines$BP)
-  data("snp_loc")
+  snp_loc <- gwascelltyper::snp_loc
   sub_SNP_LOC_DATA = snp_loc[sample(1:dim(snp_loc)[1], 1e+05),]
   topSNP_locs = sub_SNP_LOC_DATA[sub_SNP_LOC_DATA$SNP %in% topLines, ]
   topSNP_locs$locs = sprintf("%s-%s-%s", topSNP_locs$SNP, topSNP_locs$CHR, topSNP_locs$BP)
@@ -1026,6 +1052,8 @@ get_magma_paths <- function (sumstats_file, upstream_kb, downstream_kb, populati
 #'
 #' @param input_matrix Input matrix.
 #' @param numberOfBins Number of bins.
+#' 
+#' @importFrom stats quantile
 #'
 #' @return Dataframe
 #'
@@ -1037,25 +1065,11 @@ bin_specificity_into_quantiles <- function(input_matrix,numberOfBins){
   bin.columns.into.quantiles <- function(input_matrix,numberOfBins=100){
     quantileValues = rep(0,length(input_matrix))
     quantileValues[input_matrix>0] = as.numeric(cut(input_matrix[input_matrix>0],
-                                                    breaks=unique(quantile(input_matrix[input_matrix>0], probs=seq(0,1, by=1/numberOfBins), na.rm=TRUE)),
+                                                    breaks=unique(stats::quantile(input_matrix[input_matrix>0], probs=seq(0,1, by=1/numberOfBins), na.rm=TRUE)),
                                                     include.lowest=TRUE))
     return(quantileValues)
   }
   specificity_quantiles = apply(input_matrix,2,FUN=bin.columns.into.quantiles,numberOfBins=100)
   rownames(specificity_quantiles) = rownames(input_matrix)
   return(specificity_quantiles)
-}
-
-
-#' Seurat enrichment testing
-#'
-#' Takes a Seurat object with differentially expressed genes attached, and output results for enrichment testing.
-#'
-#' @param seurat_object
-#'
-#' @return Dataframe
-#'
-#' @export
-Seurat_enrichment_testing <- function(seurat_object, magma_sumstat = NULL, ldsc_sumstat = NULL, snpsea_sumstat = NULL, gwas_sample_size = NULL) {
-
 }

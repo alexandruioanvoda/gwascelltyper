@@ -142,7 +142,7 @@ sanity_check_for_exp_and_annot_environ <- function(obj, format_cell_names = TRUE
 #'
 #' Warning: this function modifies any object it is given. This function does two things at once:
 #' 1. automatically removes completely-NA rows and columns.
-#' 2. finds out if some rows or columns have more missingness than a threshold (default = 0.1 (otherwise written, 10%)), and eliminates them (if requested).
+#' 2. finds out if some rows or columns have more missingness than a threshold (default = 0.1 (otherwise written, 10\%)), and eliminates them (if requested).
 #'
 #' It then returns a list of two vectors, containing the bad row & column indexes respectively.
 #'
@@ -245,6 +245,8 @@ matrix_missingness <- function(mat, col_max_miss = 0.1, row_max_miss = 0.1, elim
 #'
 #' @param obj Environment object containing an exp (numeric matrix of genes-by-cell-ID) & an annot (dataframe of cell annotations).
 #' @param number_of_threads Number of threads to parallelize calculation over. Default = 1.
+#' @param col_max_miss Maximum missingness (is.na) for the column (samples), between 0 and 1. Default is 10\% (col_max_miss=0.1). If a column contains more than 10\% NAs, it is eliminated from further analyses.
+#' @param row_max_miss Maximum missingness (is.na) for the row (genes), between 0 and 1. Default is 10\% (row_max_miss=0.1). If a row contains more than 10\% NAs, it is eliminated from further analyses.
 #'
 #' @return Dataframe
 #'
@@ -270,7 +272,8 @@ compute_t_stat_matrix_environ <- function(obj, number_of_threads = 1, col_max_mi
   rownames(t_stats) <- rownames(obj$exp)
 
   type2_classes <- unique(obj$annot[,2])
-  t_stats = foreach(gene_index=1:nrow_exp, .combine=rbind, .options.snow=list(preschedule=TRUE)) %dopar% {
+  gene_index <- 1:nrow_exp
+  t_stats = foreach(gene_index <- 1:nrow_exp, .combine=rbind, .options.snow=list(preschedule=TRUE)) %dopar% {
 
     # Get the t-statistic of this gene for each cell type
     if (gene_index %% 1000 == 0) system(paste0("echo Processed ", gene_index, " genes out of ", nrow_exp))
@@ -286,8 +289,8 @@ compute_t_stat_matrix_environ <- function(obj, number_of_threads = 1, col_max_mi
       control_expressions <- obj$exp[gene_index, which(obj$annot[,1] != main_type)] # All cells that are not of the same main type
       if (sum(!is.na(target_expressions)) == 1 & sum(!is.na(control_expressions)) == 1) next # If there is just one non-NA replicate in both at the same time
       if (sum(!is.na(target_expressions)) == 0 | sum(!is.na(control_expressions)) == 0) next # If there is no non-NA replicate in any of them
-      if (class(try(t.test(target_expressions,control_expressions,var.equal=T)[["statistic"]], silent=TRUE))=="try-error") next # If there is any other error in performing the t_stat, continue to the next pair
-      row[k] <- t.test(target_expressions,control_expressions,var.equal=T)[["statistic"]] # You need to have at least two in each group
+      if (class(try(stats::t.test(target_expressions,control_expressions,var.equal=T)[["statistic"]], silent=TRUE))=="try-error") next # If there is any other error in performing the t_stat, continue to the next pair
+      row[k] <- stats::t.test(target_expressions,control_expressions,var.equal=T)[["statistic"]] # You need to have at least two in each group
     }
     row
   }
@@ -305,13 +308,18 @@ compute_t_stat_matrix_environ <- function(obj, number_of_threads = 1, col_max_mi
 #' @param obj Environment object containing an exp (numeric matrix of genes-by-cell-ID) & an annot (dataframe of cell annotations).
 #' @param number_of_threads Number of threads to parallelize calculation over. Default = 1.
 #'
+#' @importFrom parallel makeCluster
+#' @importFrom parallel stopCluster
+#' @importFrom parallel mclapply
+#' @importFrom stats median
+#'
 #' @return Dataframe
 #'
 #' @export
 generate_celltype_data_environ <- function(obj, number_of_threads = 1) {
   require("parallel")
   cat("Starting multithreading with", number_of_threads, "cores.\n")
-  cl <- makeCluster(number_of_threads)
+  cl <- parallel::makeCluster(number_of_threads)
 
   if (nrow(obj$annot) != ncol(obj$exp)) {
     stop("Error: number of cells in annot must equal the number of columns in exp matrix")
@@ -325,12 +333,12 @@ generate_celltype_data_environ <- function(obj, number_of_threads = 1) {
   }
   aggregate.over.celltypes <- function(rowOfMeans, celltypes, func = "mean") {
     if (func == "mean") {
-      exp_out = as.matrix(data.frame(aggregate(rowOfMeans,
+      exp_out = as.matrix(data.frame(stats::aggregate(rowOfMeans,
                                                by = list(celltypes), FUN = mean)))
     }
     else if (func == "median") {
-      exp_out = as.matrix(data.frame(aggregate(rowOfMeans,
-                                               by = list(celltypes), FUN = median)))
+      exp_out = as.matrix(data.frame(stats::aggregate(rowOfMeans,
+                                               by = list(celltypes), FUN = stats::median)))
     }
     rownames(exp_out) = exp_out[, "Group.1"]
     exp_out = exp_out[, 2]
@@ -382,29 +390,15 @@ generate_celltype_data_environ <- function(obj, number_of_threads = 1) {
                                                                   1, sum) + 1e-12)
     return(ctd_oneLevel)
   }
-  ctd = mclapply(ctd, calculate.meanexp.for.level, obj$exp, mc.cores = number_of_threads)
-  ctd = mclapply(ctd, calculate.medianexp.for.level, obj$exp, mc.cores = number_of_threads)
-  ctd = mclapply(ctd, calculate.specificity.for.level, mc.cores = number_of_threads)
-  stopCluster(cl)
+  ctd = parallel::mclapply(ctd, calculate.meanexp.for.level, obj$exp, mc.cores = number_of_threads)
+  ctd = parallel::mclapply(ctd, calculate.medianexp.for.level, obj$exp, mc.cores = number_of_threads)
+  ctd = parallel::mclapply(ctd, calculate.specificity.for.level, mc.cores = number_of_threads)
+  parallel::stopCluster(cl)
   #ctd = lapply(ctd, bin.specificity.into.quantiles, numberOfBins = 100)
   # This is the line that was giving errors with the Blueprint_ENCODE dataset ^
   # And it really ISN'T a mandatory feature for the output of this function. Using this function for specificity scores, not for specificity quantiles.
 
   return(ctd)
-}
-
-#' Compute conventional differential expression gene scores from single cell data - from environment-stored expression data
-#'
-#' Returns the differentially expressed genes for each cluster/cell-type. Output is a list of named character vectors, where each character vector (of HGNC IDs) represents a cell-type.
-#'
-#' @param obj Environment object containing an exp (numeric matrix of genes-by-cell-ID) & an annot (dataframe of cell annotations).
-#' @param number_of_threads Number of threads to parallelize calculation over. Default = 1.
-#'
-#' @return List
-#'
-#' @export
-compute_sc_diffexp_scores_environ <- function(obj) {
-  stop("Not supported yet.")
 }
 
 #' Compute t-statistic scores - from environment-stored expression data

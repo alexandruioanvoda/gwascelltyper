@@ -5,6 +5,9 @@
 #' @param population Population to download reference data for (fast downloads available for afr, amr, eas, eur, sas).
 #' @param address Path where dependencies are downloaded. Do not modify, parameter meant for developers.
 #'
+#' @importFrom utils askYesNo
+#' @importFrom utils download.file
+#'
 #' @return Path
 #'
 #' @export
@@ -19,14 +22,14 @@ download_dependencies <- function(population = "eur", address = paste0(system.fi
 
 
   # LDSC
-  if (askYesNo("Do you want to download the LDSC scripts?")) {
+  if (utils::askYesNo("Do you want to download the LDSC scripts?")) {
     system(paste0("cd ", address, " && git clone https://github.com/bulik/ldsc.git && mv ./ldsc/* ./ && conda env create --file environment.yml && source activate ldsc && conda deactivate"))
   }
 
   if (askYesNo(paste0("Do you want to download the LDSC dependencies for the ", population, " population?"))) {
     if (!file.exists(paste0(address, "refGene_coord.txt"))) {
       cat("Downloading refGene annotations from the UCSC server.\n")
-      download.file(url = "http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz", destfile = paste0(address, "refGene.txt.gz"))
+      utils::download.file(url = "http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refGene.txt.gz", destfile = paste0(address, "refGene.txt.gz"))
       refGene <- read.table(file = paste0(address, "refGene.txt.gz"))
       refGene <- refGene[,c(13,3,5,6)] # These are the only columns we need.
       refGene <- refGene[-which(duplicated(refGene[,1])),] # There are duplicate gene names due to isoform annotations. To keep it simple, we'll just remove duplicated gene IDs.
@@ -37,23 +40,23 @@ download_dependencies <- function(population = "eur", address = paste0(system.fi
     }
     if (!dir.exists(paste0(address, "hapmap3_snps"))) {
       cat("Downloading LDSC's HapMap3 SNP data.\n")
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/hapmap3_snps.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/hapmap3_snps.tgz",
                     destfile = paste0(address,"hapmap3_snps.tgz"))
       system(paste0("cd ", address," && tar -xzvf hapmap3_snps.tgz && rm hapmap3_snps.tgz"))
     }
     if (!file.exists(paste0(address, "w_hm3.snplist"))) {
       cat("Downloading another HapMap3 dependency for formatting sumstats.\n")
-      download.file(url = "https://data.broadinstitute.org/alkesgroup/LDSCORE/w_hm3.snplist.bz2", destfile = paste0(address, "w_hm3.snplist.bz2"))
+      utils::download.file(url = "https://data.broadinstitute.org/alkesgroup/LDSCORE/w_hm3.snplist.bz2", destfile = paste0(address, "w_hm3.snplist.bz2"))
       cat("Decompressing the file.\n")
       write.table(x = read.table(file = paste0(address, "w_hm3.snplist.bz2"), header = TRUE), quote = FALSE, row.names = FALSE, file = paste0(address, "w_hm3.snplist"))
       file.remove(paste0(address, "w_hm3.snplist.bz2"))
     }
     if (population == "eur") {
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_baseline_ldscores.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_baseline_ldscores.tgz",
                     destfile = paste0(address,"1000G_Phase3_baseline_ldscores.tgz"))
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/weights_hm3_no_hla.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/weights_hm3_no_hla.tgz",
                     destfile = paste0(address,"weights_hm3_no_hla.tgz"))
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_plinkfiles.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_plinkfiles.tgz",
                     destfile = paste0(address,"1000G_Phase3_plinkfiles.tgz"))
       system(paste0("cd ", address , " && tar -xzvf ./1000G_Phase3_baseline_ldscores.tgz && tar -xzvf ./weights_hm3_no_hla.tgz && tar -xzvf ./1000G_Phase3_plinkfiles.tgz"))
       # Renaming some of the files for proper standard input and deleting temp archives
@@ -62,11 +65,11 @@ download_dependencies <- function(population = "eur", address = paste0(system.fi
       file.remove(paste0(address,"1000G_Phase3_plinkfiles.tgz"))
       file.remove(paste0(address,"weights_hm3_no_hla.tgz"))
     } else if (population == "eas") {
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_EAS_baseline_v1.2_ldscores.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_EAS_baseline_v1.2_ldscores.tgz",
                     destfile = paste0(address,"1000G_Phase3_EAS_baseline_v1.2_ldscores.tgz"))
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_EAS_weights_hm3_no_MHC.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_EAS_weights_hm3_no_MHC.tgz",
                     destfile = paste0(address,"1000G_Phase3_EAS_weights_hm3_no_MHC.tgz"))
-      download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_EAS_plinkfiles.tgz",
+      utils::download.file("https://data.broadinstitute.org/alkesgroup/LDSCORE/1000G_Phase3_EAS_plinkfiles.tgz",
                     destfile = paste0(address,"1000G_Phase3_EAS_plinkfiles.tgz"))
       system(paste0("cd ", address, " && tar -xvzf 1000G_Phase3_EAS_plinkfiles.tgz && rm 1000G_Phase3_EAS_plinkfiles.tgz && mv 1000G_Phase3_EAS_plinkfiles 1000G_EAS_Phase3_plink && mkdir ./1000G_EAS_Phase3_baseline && tar -C ./1000G_EAS_Phase3_baseline/ -xvzf 1000G_Phase3_EAS_baseline_v1.2_ldscores.tgz && rm 1000G_Phase3_EAS_baseline_v1.2_ldscores.tgz && tar -xvzf 1000G_Phase3_EAS_weights_hm3_no_MHC.tgz && rm 1000G_Phase3_EAS_weights_hm3_no_MHC.tgz && mv 1000G_Phase3_EAS_weights_hm3_no_MHC 1000G_EAS_Phase3_weights_hm3_no_hla"))
       # Renaming some of the files for proper standard input
@@ -80,8 +83,8 @@ download_dependencies <- function(population = "eur", address = paste0(system.fi
 
   # MAGMA
   if (askYesNo(paste0("Do you want to download the MAGMA dependencies for the ", population, " population?"))) {
-    download.file(paste0("https://ctg.cncr.nl/software/MAGMA/ref_data/g1000_", population, ".zip"), destfile = paste0(address,"g1000_", population,".zip"))
-    unzip(paste0(address,"g1000_", population,".zip"), exdir = address)
+    utils::download.file(paste0("https://ctg.cncr.nl/software/MAGMA/ref_data/g1000_", population, ".zip"), destfile = paste0(address,"g1000_", population,".zip"))
+    utils::unzip(paste0(address,"g1000_", population,".zip"), exdir = address)
     file.remove(paste0(address,"g1000_", population, ".zip"))
   }
 

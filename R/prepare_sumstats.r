@@ -6,6 +6,8 @@
 #' @param sumstats_munged File to output into. Default = paste0(sumstats_raw, "_processed.sumstats").
 #' @param preview Show ideal MAGMA sumstats file then exit. If false (default), it proceeds to the processing.
 #'
+#' @importFrom utils data
+#'
 #' @return Path
 #'
 #' @export
@@ -34,7 +36,7 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
 
 
   cat("Loading reference header names.\n")
-  data("standard_sumstats_column_headers")
+  standard_sumstats_column_headers <- gwascelltyper::standard_sumstats_column_headers
 
 
   # Helper functions
@@ -74,7 +76,7 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
     cat("There is no SNP column found within the data. It must be inferred from CHR and BP information. Note: this process drops any SNPs which are not from Hapmap.\nInitial number of rows:", nrow(sumstats), "\n")
 
     # Load genome builds and ask which one of these the SNPs are from
-    data("snp_loc")
+    snp_loc <- gwascelltyper::snp_loc
     genomebuild <- ask_genome_build()
 
     # SNP matching
@@ -93,7 +95,7 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
       data("snp_loc")
       genomebuild <- ask_genome_build()
 
-      sumstats_norsid[,SNP:=NULL] # Delete the SNP column, it's defective anyway (and yes, the := operator in data.table works by reference, no copy made, see https://jangorecki.gitlab.io/data.cube/library/data.table/html/assign.html)
+      sumstats_norsid <- sumstats_norsid[, !"SNP"]
       sumstats_norsid = merge(sumstats_norsid, snp_loc[snp_loc$Build == genomebuild,][, -4], by = c("CHR", "BP")) # SNP matching
       cat("Number of rows remaining (for which we managed to get rsIDs out of the ones that didn't have one):", nrow(sumstats_norsid), ".\n")
 
@@ -121,7 +123,7 @@ munge_sumstats_for_MAGMA <- function(sumstats_raw, sumstats_munged = paste0(sums
 #'
 #' Process genome-wide association study summary statistics file into the required LDSC format (given MAGMA-formatted sumstats) for analyses.
 #'
-#' @param sumstats_raw File containing the raw summary statistics file.
+#' @param sumstats_magma File containing the raw summary statistics file.
 #' @param sumstats_munged File to output into. Default = paste0(sumstats_raw, "_processed.sumstats").
 #' @param number_of_threads Number of threads to parallelize calculation over. Default = 1.
 #' @param gwas_sample_size If GWAS sample size is not a constant integer for all SNPs, then leave NULL. Otherwise, must be an integer.
@@ -211,8 +213,8 @@ munge_sumstats_for_LDSC_from_MAGMA <- function(sumstats_magma = NULL, sumstats_m
 #'
 #' Process genome-wide association study summary statistics file into the required SNPsea format (given MAGMA-formatted sumstats) for analyses. Leaves only the genome-wide significant SNPs (because that is the SNPsea approach).
 #'
-#' @param sumstats_raw File containing the raw summary statistics file.
-#' @param sumstats_munged File to output into. Default = paste0(sumstats_raw, "_processed.sumstats").
+#' @param sumstats_magma File containing GWAS summary statistics file properly formatted for MAGMA.
+#' @param sumstats_munged File to output SNPsea-format into. Default = paste0(sumstats_magma, "_processed.sumstats").
 #' @param preview Show ideal SNPsea sumstats file then exit. If false (default), it proceeds to the processing.
 #'
 #' @return Path
