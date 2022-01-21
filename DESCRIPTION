@@ -1,7 +1,7 @@
 Package: gwascelltyper
 Type: Package
 Title: Fast GWAS Enrichment Testing
-Version: 0.9.1
+Version: 0.9.5.1
 Author: Alexandru-Ioan Voda
 Maintainer: Alexandru-Ioan Voda <alexandru.voda@seh.ox.ac.uk>
 Description: Fast GWAS enrichment testing for gene expression data, using LDSC, SNPsea & MAGMA (and code from MAGMA.Celltyping by N. Skene et al. 2018).

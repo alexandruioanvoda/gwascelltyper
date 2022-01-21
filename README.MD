@@ -2,7 +2,7 @@
 
 **gwascelltyper** is an R package for testing the enrichment of GWAS risk signal in gene expression data. For any questions, email `alexandru.voda@seh.ox.ac.uk`
 
-Current version: `0.9 beta` (24th of September 2019)
+Current version: `0.9.5` (24th of January 2022)
 
 Changes log file to be added soon.
 

@@ -409,6 +409,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 #' Compute GWAS enrichment in discrete lists of genes with MAGMA.
 #'
 #' @param gene_sets List of genesets. Each geneset must be a character vector, containing HGNC gene names.
+#' @param genesets_conditioned_for Character vector of name(s) of the geneset(s) (from the above list) that should be conditioned for (if NULL, no geneset is conditioned for). Default is NULL.
 #' @param sumstats_file Address of properly formatted MAGMA GWAS file.
 #' @param output_dir Folder where you want the output to be stored. Default = NULL, which makes this function create a directory where results will be temporarily stored. The directory will be deleted afterwards, if this parameter is null. The only output will be the return. Otherwise, both the files and the return are kept.
 #' @param upstream_kb Number of kb upstream of gene, SNP-to-gene mapping window. Default = 10.
@@ -429,7 +430,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 #' @return Dataframe
 #'
 #' @export
-compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, output_dir = NULL, upstream_kb = 10, downstream_kb = 1.5,
+compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, genesets_conditioned_for = NULL, output_dir = NULL, upstream_kb = 10, downstream_kb = 1.5,
                                               gene_nomenclature = "hgnc", population = "eur", gwas_sample_size = NULL,
                                               genome_ref_path = paste0(system.file(package = "gwascelltyper"),"/extdata/g1000_", population),
                                               magma_path = paste0(system.file(package = "gwascelltyper"),"/extdata/magma-linux64")) {
@@ -501,6 +502,10 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, output_d
   cat("Preparing name map.\n")
   name_map <- cbind(names(gene_sets), paste0("Name_", 1:length(gene_sets), "_geneset"))
   names(gene_sets) <- name_map[,2]
+  if (!is.null(genesets_conditioned_for)) {
+    genesets_conditioned_for_translated <- name_map[match(genesets_conditioned_for, name_map[,1]),2]
+    cntrl_gs <- paste(genesets_conditioned_for_translated, collapse=",")
+  }
 
 
   # Preparation for the enrichment test
@@ -524,8 +529,13 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, output_d
 
 
   # Now you run the analysis.
-  magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s'",
-                      magma_path, prefix, geneCovarFile, output_dir, analysis_name)
+  if (!is.null(genesets_conditioned_for)) {
+    magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s'--model direction=positive condition='%s' --out '%s.%s'",
+                        magma_path,         prefix,                    geneCovarFile,                           cntrl_gs,  output_dir, analysis_name)
+  } else {
+    magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s'",
+                        magma_path,         prefix,                    geneCovarFile, output_dir, analysis_name)
+  }
   print(magma_cmd)
   system(magma_cmd)
 
