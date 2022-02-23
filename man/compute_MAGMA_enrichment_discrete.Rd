@@ -6,6 +6,7 @@
 \usage{
 compute_MAGMA_enrichment_discrete(
   gene_sets,
+  genesets_conditioned_for = NULL,
   sumstats_file,
   output_dir = NULL,
   upstream_kb = 10,
@@ -20,6 +21,8 @@ compute_MAGMA_enrichment_discrete(
 }
 \arguments{
 \item{gene_sets}{List of genesets. Each geneset must be a character vector, containing HGNC gene names.}
+
+\item{genesets_conditioned_for}{Character vector of name(s) of the geneset(s) (from the above list) that should be conditioned for (if NULL, no geneset is conditioned for). Default is NULL.}
 
 \item{sumstats_file}{Address of properly formatted MAGMA GWAS file.}
 
