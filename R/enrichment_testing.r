@@ -430,7 +430,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
 #' @return Dataframe
 #'
 #' @export
-compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, genesets_conditioned_for = NULL, output_dir = NULL, upstream_kb = 10, downstream_kb = 1.5,
+compute_MAGMA_enrichment_discrete <- function(gene_sets, genesets_conditioned_for = NULL, sumstats_file, output_dir = NULL, upstream_kb = 10, downstream_kb = 1.5,
                                               gene_nomenclature = "hgnc", population = "eur", gwas_sample_size = NULL,
                                               genome_ref_path = paste0(system.file(package = "gwascelltyper"),"/extdata/g1000_", population),
                                               magma_path = paste0(system.file(package = "gwascelltyper"),"/extdata/magma-linux64")) {
@@ -530,7 +530,7 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, sumstats_file, genesets
 
   # Now you run the analysis.
   if (!is.null(genesets_conditioned_for)) {
-    magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s'--model direction=positive condition='%s' --out '%s.%s'",
+    magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --model direction=positive condition='%s' --out '%s/%s'",
                         magma_path,         prefix,                    geneCovarFile,                           cntrl_gs,  output_dir, analysis_name)
   } else {
     magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s'",
