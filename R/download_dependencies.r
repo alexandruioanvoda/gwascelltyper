@@ -22,11 +22,10 @@ get_os <- function(){
 }
 
 
-#' Download baseline data
+#' Download dependencies
 #'
-#' Downloads baseline data (e.g. LD regions & others) pre-formatted for each of the 3 packages (LDSC, MAGMA & SNPsea)
+#' Downloads data dependencies (e.g. linkage disequilibrium, gene annotations, etc.) pre-formatted for each of the 3 packages (LDSC, MAGMA & SNPsea)
 #'
-#' @param population Population to download reference data for (fast downloads available for afr, amr, eas, eur, sas).
 #' @param address Path where dependencies are downloaded. Do not modify, parameter meant for developers.
 #'
 #' @importFrom utils askYesNo
@@ -36,15 +35,50 @@ get_os <- function(){
 #'
 #' @export
 download_dependencies <- function(address = paste0(system.file(package="gwascelltyper"), "/extdata/")) {
+  # Because some of these downloads may take quite a while to finish,
+  # and R timeouts downloads after 60 seconds by default, we're recalibrating that parameter to 1 hour for users with slow internet.
+  options(timeout=60*60)
   possible_pops = c("eur", "eas", "afr", "amr", "sas", "subpop") # For which there would be readily-available, pre-processed MAGMA LD reference datasets.
   
   # MAGMA data --------
   if (utils::askYesNo("Do you want to download the MAGMA dependency data? (recommended yes)")) {
+    utils::download.file(url="https://ctg.cncr.nl/software/MAGMA/aux_files/NCBI38.zip", destfile = paste0(address, "NCBI38.zip"))
+    utils::unzip(paste0(address,"NCBI38.zip"), exdir = address)
+    utils::download.file(url="https://ctg.cncr.nl/software/MAGMA/aux_files/NCBI37.3.zip", destfile = paste0(address, "NCBI37.3.zip"))
+    utils::unzip(paste0(address,"NCBI37.3.zip"), exdir = address)
+    # reformatting the MAGMA gene-loc files a bit:
+    df <- utils::read.table(paste0(address, "NCBI38.gene.loc")); df <- df[,c(6, 2:5, 1)]
+    utils::write.table(df, file = paste0(address, "NCBI38.hgnc.gene.loc"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+    file.rename(from = paste0(address, "NCBI38.gene.loc"), to = paste0(address, "NCBI38.entrez.gene.loc"))
+    df <- utils::read.table(paste0(address, "NCBI37.3.gene.loc")); df <- df[,c(6, 2:5, 1)]
+    utils::write.table(df, file = paste0(address, "NCBI37.3.hgnc.gene.loc"), quote = FALSE, sep = "\t", row.names = FALSE, col.names = FALSE)
+    file.rename(from = paste0(address, "NCBI37.3.gene.loc"), to = paste0(address, "NCBI37.3.entrez.gene.loc"))
+    # Now, let's download LD data:
     population <- tolower(readline(prompt="Enter which population (from: eur, eas, afr, amr, sas, subpop): "))
     if (!population %in% possible_pops) {stop("Wrong population name. Choose from eur, eas, afr, amr, sas or subpop.")}
     utils::download.file(paste0("https://ctg.cncr.nl/software/MAGMA/ref_data/g1000_", population, ".zip"), destfile = paste0(address,"g1000_", population,".zip"))
     utils::unzip(paste0(address,"g1000_", population,".zip"), exdir = address)
-    file.remove(paste0(address,"g1000_", population, ".zip"))
+    #file.remove(paste0(address,"g1000_", population, ".zip"))
+  }
+  
+  # MAGMA executable --------
+  if (askYesNo("Do you want to download the SNPsea executable?")) {
+    if (get_os() == "windows") {
+      utils::download.file(url = "https://ctg.cncr.nl/software/MAGMA/prog/magma_v1.10_win.zip", destfile = paste0(address, "magma_v1.10_win.zip"))
+      utils::unzip(paste0(address,"magma_v1.10_win.zip"), exdir = address)
+    } else {
+      if (get_os() == "unix") {
+        utils::download.file(url = "https://ctg.cncr.nl/software/MAGMA/prog/magma_v1.10_static.zip", destfile = paste0(address, "magma_v1.10_static.zip"))
+        utils::unzip(paste0(address,"magma_v1.10_static.zip"), exdir = address)
+      } else {
+        if (get_os() == "osx") {
+          utils::download.file(url = "https://ctg.cncr.nl/software/MAGMA/prog/magma_v1.10_mac.zip", destfile = paste0(address, "magma_v1.10_mac.zip"))
+          utils::unzip(paste0(address,"magma_v1.10_mac.zip"), exdir = address)
+        } else {
+          stop("gwascelltyper cannot detect operating system properly. Please raise an issue on github mentioning this and sessionInfo() outputs.")
+        }
+      }
+    }
   }
   
   # SNPsea data --------
@@ -68,7 +102,7 @@ download_dependencies <- function(address = paste0(system.file(package="gwascell
     cat("All SNPsea dependency files are downloaded for the eur population, in the following path:", address,"\n")
   }
   # SNPsea executable --------
-  if (askYesNo("Do you want to download the SNPsea dependency data?")) {
+  if (askYesNo("Do you want to download the SNPsea executable?")) {
     if (get_os() == "windows") {
       stop("SNPsea does not have a publicly available executable for Windows, but you can compile the C++ code from https://github.com/slowkow/snpsea\nIt needs to be placed in gwascelltyper/extdata/snpsea-executable")
     } else {
