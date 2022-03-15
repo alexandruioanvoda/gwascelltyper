@@ -2,21 +2,18 @@
 % Please edit documentation in R/download_dependencies.r
 \name{download_dependencies}
 \alias{download_dependencies}
-\title{Download baseline data}
+\title{Download dependencies}
 \usage{
 download_dependencies(
-  population = "eur",
   address = paste0(system.file(package = "gwascelltyper"), "/extdata/")
 )
 }
 \arguments{
-\item{population}{Population to download reference data for (fast downloads available for afr, amr, eas, eur, sas).}
-
 \item{address}{Path where dependencies are downloaded. Do not modify, parameter meant for developers.}
 }
 \value{
 Path
 }
 \description{
-Downloads baseline data (e.g. LD regions & others) pre-formatted for each of the 3 packages (LDSC, MAGMA & SNPsea)
+Downloads data dependencies (e.g. linkage disequilibrium, gene annotations, etc.) pre-formatted for each of the 3 packages (LDSC, MAGMA & SNPsea)
 }
