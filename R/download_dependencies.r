@@ -67,7 +67,7 @@ download_dependencies <- function(address = paste0(system.file(package="gwascell
       utils::download.file(url = "https://ctg.cncr.nl/software/MAGMA/prog/magma_v1.10_win.zip", destfile = paste0(address, "magma_v1.10_win.zip"))
       utils::unzip(paste0(address,"magma_v1.10_win.zip"), exdir = address)
     } else {
-      if (get_os() == "unix") {
+      if (get_os() == "linux") {
         utils::download.file(url = "https://ctg.cncr.nl/software/MAGMA/prog/magma_v1.10_static.zip", destfile = paste0(address, "magma_v1.10_static.zip"))
         utils::unzip(paste0(address,"magma_v1.10_static.zip"), exdir = address)
       } else {
