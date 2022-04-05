@@ -15,7 +15,7 @@ on:
 name: CRAN-check
 
 jobs:
-  R-CMD-check:
+  CRAN-check:
     runs-on: ${{ matrix.config.os }}
     container: ${{ matrix.config.image }}
 
