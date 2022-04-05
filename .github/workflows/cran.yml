@@ -12,7 +12,7 @@ on:
     branches:
       - master
 
-name: gwascelltyper-CRAN-check
+name: CRAN-check
 
 jobs:
   R-CMD-check:
