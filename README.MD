@@ -1,7 +1,7 @@
 # gwascelltyper
 
 [![Project Status: Active - The project has reached a stable, usable state and is being actively developed.](http://www.repostatus.org/badges/latest/active.svg)](http://www.repostatus.org/#active)
-[![R-CMD-check](https://github.com/alexandruioanvoda/gwascelltyper/workflows/R-CMD-check/badge.svg)](https://github.com/alexandruioanvoda/gwascelltyper/actions)
+[![CRAN-check](https://github.com/alexandruioanvoda/gwascelltyper/workflows/CRAN-check/badge.svg)](https://github.com/alexandruioanvoda/gwascelltyper/actions)
 
 **gwascelltyper** is an R package for testing the enrichment of GWAS risk signal in gene expression data. For any questions, email `alexandru.voda@seh.ox.ac.uk`
 
