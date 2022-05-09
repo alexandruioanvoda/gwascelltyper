@@ -10,5 +10,5 @@ get_os()
 character vector of size 1
 }
 \description{
-Function that outputs "windows", "unix" or "osx" depending on what system it is run on. Created by Will from R-bloggers here: https://www.r-bloggers.com/2015/06/identifying-the-os-from-r/
+Function that outputs "windows", "linux" or "osx" depending on what system it is run on. Created by Will from R-bloggers here: https://www.r-bloggers.com/2015/06/identifying-the-os-from-r/
 }

@@ -6,15 +6,10 @@
 #' @param sumstats_file Address of properly formatted LDSC GWAS file.
 #' @param output_dir Folder where you want the output to be stored. Default = NULL, which makes this function create a directory where results will be temporarily stored. The directory will be deleted afterwards, if this parameter is null. The only output will be the return. Otherwise, both the files and the return are kept.
 #' @param number_of_threads Number of threads to parallelize calculation over. Default = 1.
-#' @param population Word describing ancestry of the GWAS data. Relevant so that the proper LD panel will be used (default = eur; alternatives = afr, amr, eas, sas, subpop)
-#' @param ldsc_path Path to folder containing all LDSC scripts.
-#' @param gene_coord Adress of UCSC bed file containing all the gene coordinates.
 #' @param window_size Size of window surrounding gene, for SNP-to-gene mapping purposes. Default = 100000 (100kb).
-#' @param bim_prefix Path + prefix of plink BIM files required by LDSC to compute LD scores.
-#' @param print_snps Path of file containing HapMap3 SNPs.
-#' @param ref_ld_chr Path of file containing LD reference panel. Tell LDSC which LD Scores to use as the predictors in the LD Score regression. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz to the filename prefix. LDSC will automatically concatenate .l2.ldscore files split across 22 chromosomes. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz to the filename prefix. If the filename prefix contains the symbol (at), LDSC will replace the (at) symbol with chromosome numbers. Otherwise, LDSC will append chromosome numbers to the end of the filename prefix. Example 1: --ref-ld-chr ld/ will read ld/1.l2.ldscore.gz ... ld/22.l2.ldscore.gz Example 2: --ref-ld-chr ld/(at)_kg will read ld/1_kg.l2.ldscore.gz ... ld/22_kg.l2.ldscore.gz
-#' @param w_ld_chr Filename prefix for file with LD Scores with sum r^2 taken over SNPs included in the regression. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz. LDSC will read files split into 22 chromosomes in the same manner as --ref-ld-chr.
+#' @param pop Word describing ancestry of the GWAS data. Relevant so that the proper LD panel will be used (default = eur; alternatives = afr, amr, eas, sas, subpop)
 #' @param ld_wind_cm Specify the window size to be used for estimating LD Scores in units of centiMorgans (cM). Default = 1.
+#' @param data_dependencies A named list, containing all of the dependencies for LDSC (e.g. Python script paths, SNP linkage disequilibrium data, etc.). Provided by default by another function, called gwascelltyper::dep_path().
 #'
 #' @import doParallel
 #' @import data.table
@@ -25,50 +20,33 @@
 #' @return Dataframe
 #'
 #' @export
-compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file, output_dir = NULL, number_of_threads = 1, window_size = 100000, population = "eur", ld_wind_cm = 1,
-                                                       ldsc_path = paste0(system.file(package="gwascelltyper"), "/extdata/"),
-                                                       gene_coord = paste0(system.file(package="gwascelltyper"), "/extdata/refGene_coord.txt"),
-                                                       print_snps = paste0(system.file(package="gwascelltyper"), "/extdata/hapmap3_snps/hm."),
-                                                       bim_prefix = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_plink/1000G.",toupper(population),".QC."),
-                                                       ref_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_baseline/baseline."),
-                                                       w_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/1000G_",toupper(population),"_Phase3_weights_hm3_no_hla/weights.")) {
+
+#' @param ldsc_path Path to folder containing all LDSC scripts.
+#' @param gene_coord Adress of UCSC bed file containing all the gene coordinates.
+#' @param bim_prefix Path + prefix of plink BIM files required by LDSC to compute LD scores.
+#' @param print_snps Path of file containing HapMap3 SNPs.
+#' @param ref_ld_chr Path of file containing LD reference panel. Tell LDSC which LD Scores to use as the predictors in the LD Score regression. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz to the filename prefix. LDSC will automatically concatenate .l2.ldscore files split across 22 chromosomes. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz to the filename prefix. If the filename prefix contains the symbol (at), LDSC will replace the (at) symbol with chromosome numbers. Otherwise, LDSC will append chromosome numbers to the end of the filename prefix. Example 1: --ref-ld-chr ld/ will read ld/1.l2.ldscore.gz ... ld/22.l2.ldscore.gz Example 2: --ref-ld-chr ld/(at)_kg will read ld/1_kg.l2.ldscore.gz ... ld/22_kg.l2.ldscore.gz
+#' @param w_ld_chr Filename prefix for file with LD Scores with sum r^2 taken over SNPs included in the regression. LDSC will automatically append .l2.ldscore/.l2.ldscore.gz. LDSC will read files split into 22 chromosomes in the same manner as --ref-ld-chr.
+
+compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file, output_dir = NULL, number_of_threads = 1, window_size = 100000, pop = "eur", ld_wind_cm = 1,
+                                                       data_dependencies = dep_path(pop, "ldsc")) {
   # Checks
   if (is.null(gene_sets)) {stop("What gene sets?")}
   if (is.null(sumstats_file)) {stop("What sumstats file?")}
-  if (!file.exists(sumstats_file)) {stop("Sumstats file does not exist at provided path.")}
-  if (is.null(ldsc_path)) {stop("What LDSC path?")}
-  if (is.null(gene_coord)) {stop("What gene_coord param?")}
-  if (is.null(bim_prefix)) {stop("What bim_prefix param?")}
-  if (is.null(print_snps)) {stop("What print_snps param?")}
-  if (is.null(ref_ld_chr)) {stop("What ref_ld_chr param?")}
-  if (is.null(w_ld_chr)) {stop("What w_ld_chr param?")}
-  if (!file.exists(sumstats_file)) {stop("GWAS summary statistics file doesn't exist.")}
-  file_dependencies <- c(paste0(ldsc_path, c("ldsc.py", "make_annot.py")),
-                         gene_coord,
-                         paste0(print_snps, 1:22, ".snp"),
-                         paste0(bim_prefix, do.call(paste0, expand.grid(paste0(1:22, "."), c("bed", "fim", "fam")))),
-                         c(paste0(ref_ld_chr, do.call(paste0, expand.grid(paste0(1:22, "."), c("annot.gz", "l2.ldscore.gz", "l2.M", "l2.M_5_50")))),
-                           paste0(gsub(pattern = "/baseline.", replacement = "/", x = ref_ld_chr, fixed = TRUE), "print_snps.txt")),
-                         paste0(w_ld_chr, 1:22, ".l2.ldscore.gz"))
-  cat("Checking LDSC file dependencies.\n")
-  if (any(!file.exists(file_dependencies))) {
-    cat("\n\n", file_dependencies[!file.exists(file_dependencies)], "\n")
-    stop("The files above were passed as arguments but do not exist.")
-  } else {
-    rm(file_dependencies)
-  }
-  # A few other boilerplate checks:
+  if (!file.exists(sumstats_file)) {stop("GWAS sumstats file does not exist at provided path.")}
+  # dep_path() already checked the existence of the other required files!
+
+  
+  
+  
+  
+  # A few other boilerplate checks: # This should be modified to a general gene-set renamer applicable to all enrichment-testing functions.
   window_size <- format(window_size, scientific = FALSE)
   if (names(gene_sets)[length(gene_sets)] != "All_genes_control") stop("No <All_genes_control> contained within the last geneset from the gene_sets object.")
-  if (any(grepl(pattern = "[^A-Za-z0-9_]", x = names(gene_sets)))) {
-    cat("At least one of the cell type names contains at least a special character. Replacing with underscore.\n")
-    names(gene_sets) <- format_celltype_names(names(gene_sets))
-  }
-  names_of_gene_sets <- names(gene_sets) # Retaining this in memory as the gene_sets object will get modified into a df.
-
+  gobj <- gene_object_renamer(gene_sets)
+  gene_sets <- gobj$gobj
 
   cat("LDSC enrichment analysis started at:", as.character(Sys.time()), "\n")
-
 
   # Boiler plate code in case user wants to store intermediary and output files somewhere permanent instead of the default path (default = a temporary directory, that is erased after the run).
   store_results = FALSE
@@ -89,7 +67,6 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
       dir.create(output_dir)
     }
   }
-
 
   cat("Creating gene-set file to make the thin-annot out of.\n")
   geneset_file <- paste0(output_dir, "/geneset_file.tsv")
@@ -115,7 +92,6 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
   gc()
   cat("Initializing R multithreading.\n")
   registerDoParallel(cores=number_of_threads)
-
 
   foreach::foreach(i=1:22, .options.snow=list(preschedule=TRUE)) %do% {
     gc()
@@ -172,6 +148,7 @@ compute_LDSC_enrichment_discrete_optimized <- function(gene_sets, sumstats_file,
   # Here we build the results dataframe for plotting.
   results <- utils::read.table(paste0(output_dir, "/ldsc_final_output.cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
   colnames(results)[4] <- "P_value"
+  results$Name <- gobj$df$orig_names[match(results$Name, gobj$df$temp_names)]
 
 
   # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
@@ -246,10 +223,8 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
   # A few other boilerplate checks:
   window_size <- format(window_size, scientific = FALSE)
   if (names(gene_sets)[length(gene_sets)] != "All_genes_control") stop("No <All_genes_control> contained within the last geneset from the gene_sets object.")
-  if (any(grepl(pattern = "[^A-Za-z0-9_]", x = names(gene_sets)))) {
-    cat("At least one of the cell type names contains at least a special character. Replacing with underscore.\n")
-    names(gene_sets) <- format_celltype_names(names(gene_sets))
-  }
+  gobj <- gene_object_renamer(gene_sets)
+  gene_sets <- gobj$gobj
 
 
   cat("LDSC enrichment analysis started at:", as.character(Sys.time()), "\n")
@@ -394,6 +369,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
   # Here we build the results dataframe for plotting.
   results <- utils::read.table(paste0(output_dir, "/ldsc_final_output.cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
   colnames(results)[4] <- "P_value"
+  results$Name <- gobj$df$orig_names[match(results$Name, gobj$df$temp_names)]
 
 
   # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
@@ -500,11 +476,10 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, genesets_conditioned_fo
 
 
   cat("Preparing name map.\n")
-  name_map <- cbind(names(gene_sets), paste0("Name_", 1:length(gene_sets), "_geneset"))
-  names(gene_sets) <- name_map[,2]
+  gobj <- gene_object_renamer(gene_sets)
+  gene_sets <- gobj$gobj
   if (!is.null(genesets_conditioned_for)) {
-    genesets_conditioned_for_translated <- name_map[match(genesets_conditioned_for, name_map[,1]),2]
-    cntrl_gs <- paste(genesets_conditioned_for_translated, collapse=",")
+    cntrl_gs <- paste(gobj$df$temp_names[match(genesets_conditioned_for, gobj$df$orig_names)], collapse=",")
   }
 
 
@@ -553,7 +528,7 @@ compute_MAGMA_enrichment_discrete <- function(gene_sets, genesets_conditioned_fo
   }
 
   # This returns the true gene-set names from the map.
-  res$Name <- name_map[match(res$Name, name_map[,2]),1]
+  results$Name <- gobj$df$orig_names[match(results$Name, gobj$df$temp_names)]
 
   # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
   if (!store_results) unlink(output_dir, recursive = TRUE)
@@ -599,10 +574,11 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
   if (is.null(snp_intervals)) {stop("What SNPsea snp_intervals param?")}
   if (is.null(null_snps)) {stop("What SNPsea null_snps param?")}
   if (!file.exists(sumstats_file)) {stop("GWAS summary statistics file doesn't exist.")}
-  if (any(grepl(pattern = "[^A-Za-z0-9_]", x = names(gene_sets)))) {
-    cat("At least one of the cell type names contains at least a special character. Replacing with underscore.\n")
-    names(gene_sets) <- format_celltype_names(names(gene_sets))
-  }
+  
+  
+  gobj <- gene_object_renamer(gene_sets)
+  gene_sets <- gobj$gobj
+  
 
   print("SNPsea consumes a lot of RAM memory, so we are calling garbage collection in R now, before proceeding to the analysis.")
   gc()
@@ -684,6 +660,7 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
   # Read file located in out folder, then change headers from c("condition", "pvalue") to c("Name","P_value")
   results <- read.csv(file = paste0(output_dir, "/snpsea/condition_pvalues.txt"), sep = "\t", header = TRUE, stringsAsFactors = FALSE)
   colnames(results) <- c("Name", "P_value", "Nulls_observed", "Nulls_tested")
+  results$Name <- gobj$df$orig_names[match(results$Name, gobj$df$temp_names)]
 
 
   # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
@@ -783,9 +760,10 @@ compute_MAGMA_enrichment_linear <- function(gene_score_matrix, sumstats_file, ou
   # Initializing a few params
   analysis_name = basename(output_dir)
   sumstats_file = path.expand(sumstats_file)
+  
   cat("Preparing name map.\n")
-  name_map <- cbind(colnames(gene_score_matrix), paste0("Name_", 1:ncol(gene_score_matrix), "_geneset"))
-  colnames(gene_score_matrix) <- name_map[,2]
+  gobj <- gene_object_renamer(gene_score_matrix)
+  gene_score_matrix <- gobj$gobj
   if (gene_nomenclature == "hgnc") {
     gene_score_matrix <- cbind(hgnc = rownames(gene_score_matrix), gene_score_matrix)
   } else {
@@ -823,8 +801,8 @@ compute_MAGMA_enrichment_linear <- function(gene_score_matrix, sumstats_file, ou
   }
 
 
-  # This returns the true geneset names.
-  res$Name <- name_map[match(res$Name, name_map[,2]),1]
+  # This returns the true gene-set names from the map.
+  results$Name <- gobj$df$orig_names[match(results$Name, gobj$df$temp_names)]
 
 
   # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
@@ -873,10 +851,9 @@ compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, o
   if (is.null(snp_intervals)) {stop("What SNPsea snp_intervals param?")}
   if (is.null(null_snps)) {stop("What SNPsea null_snps param?")}
   if (!file.exists(sumstats_file)) {stop("GWAS summary statistics file doesn't exist.")}
-  if (any(grepl(pattern = "[^A-Za-z0-9_]", x = colnames(gene_score_matrix)))) {
-    cat("At least one of the cell type names contains at least a special character. Replacing with underscore.\n")
-    colnames(gene_score_matrix) <- format_celltype_names(colnames(gene_score_matrix))
-  }
+  
+  gobj <- gene_object_renamer(gene_score_matrix)
+  gene_score_matrix <- gobj$gobj
 
 
 
@@ -940,6 +917,7 @@ compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, o
   # Read file located in out folder, then change headers from c("condition", "pvalue") to c("Name","P_value")
   results <- read.csv(file = paste0(output_dir, "/snpsea/condition_pvalues.txt"), sep = "\t", header = TRUE)
   colnames(results) <- c("Name", "P_value", "Nulls_observed", "Nulls_tested")
+  results$Name <- gobj$df$orig_names[match(results$Name, gobj$df$temp_names)]
 
 
 
@@ -1082,4 +1060,33 @@ bin_specificity_into_quantiles <- function(input_matrix,numberOfBins){
   specificity_quantiles = apply(input_matrix,2,FUN=bin.columns.into.quantiles,numberOfBins=100)
   rownames(specificity_quantiles) = rownames(input_matrix)
   return(specificity_quantiles)
+}
+
+#' Gene object renamer
+#'
+#' Takes a named-list (of gene sets) or a matrix (of gene ranking sets) and renames the sets (e.g. from "CD4+ T-cell" to "CD4_T_cell")
+#'
+#' @param gobj Either: 1. named list of character vectors (each vector is a gene-set, containing gene IDs), or 2. numeric matrix (each row is a gene, each column is a condition/group/set)
+#'
+#' @return List
+#'
+#' @export
+gene_object_renamer <- function(gobj) {
+  if (is.matrix(gobj) | is.list(gobj)) {
+    if (is.list(gobj)) {
+      # Then it's a list
+      df <- data.frame(orig_names = names(gobj),
+                       temp_names = paste0("GS", 1:length(gobj)))
+      names(gobj) <- df$temp_names
+      return(list(gobj = gobj, gs_names = df))
+    } else {
+      # Then it's a matrix
+      df <- data.frame(orig_names = colnames(gobj),
+                       temp_names = paste0("GS", 1:ncol(gobj)))
+      colnames(gobj) <- df$temp_names
+      return(list(gobj = gobj, df = df))
+    }
+  } else {
+    stop("Gene expression object is not a list or matrix.")
+  }
 }

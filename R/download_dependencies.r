@@ -21,6 +21,98 @@ get_os <- function(){
   tolower(os)
 }
 
+#' Dependency data paths
+#'
+#' Checks package-specific paths for where the dependency-data is usually stored. Dependency data is mostly data on LD regions, but other required stats too, and are usually population- (e.g. eas, afr, eur, etc.) and package- (LDSC, MAGMA & SNPsea) specific.
+#'
+#' @param pop Reference population shortcode (right now: afr, amr, eas, eur, sas).
+#' @param for_which Which softwares to check (right now: all, magma, snpsea or ldsc).
+#'
+#' @importFrom utils askYesNo
+#'
+#' @return Named list (of paths)
+#'
+#' @export
+dep_path <- function(pop = c("eur", "afr", "amr", "eas", "sas")[1],
+                     for_which = c("all", "magma", "snpsea", "ldsc")[1]) {
+  
+  popu <- toupper(pop)
+  
+  # First, defining the relative file names
+  files_to_check <- list()
+  if (for_which %in% c("all", "ldsc")) {
+    # LDSC executables
+    files_to_check[["ldsc_scripts"]] <- c("ldsc.py", "make_annot.py")
+    
+    # LDSC data
+    files_to_check[["1000g_bim_ldsc"]] <- paste0("1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".bim")
+    files_to_check[["1000g_fam_ldsc"]] <- paste0("1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".fam")
+    files_to_check[["1000g_bed_ldsc"]] <- paste0("1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".bed")
+    files_to_check[["1000g_frq_ldsc"]] <- paste0("1000G_",popu,"_Phase3_frq/1000G.",popu,".QC.",1:22,".frq")
+    files_to_check[["1000g_ldscore_universal_ldsc"]] <- paste0("1000G_",popu,"_Phase3_weights_hm3_no_hla/weights.",1:22,".l2.ldscore.gz")
+    files_to_check[["1000g_ldscore_category_ldsc"]] <- paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.ldscore.gz")
+    files_to_check[["1000g_m_m550_ldsc"]] <- c(paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M"),
+                                               paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M_5_50"))
+    files_to_check[["1000g_annot_ldsc"]] <- paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".annot.gz")
+    # I think this may actually not be needed, need to check later ^
+    files_to_check[["hm3snps_ldsc"]] <- paste0("hapmap3_snps/hm", 1:22, ".snp")
+    files_to_check[["geneloc_ldsc"]] <- "refGene_coord.txt"
+  }
+  if (for_which %in% c("all", "magma")) {
+    if (get_os()=="linux") {
+      files_to_check[["magma_binary"]] <- "magma-linux64"
+    } else if (get_os()=="osx") {
+      files_to_check[["magma_binary"]] <- "magma-osx"
+    } else if (get_os()=="windows") {
+      files_to_check[["magma_binary"]] <- "magma.exe"
+    }
+    
+    # MAGMA data
+    files_to_check[["1000g_bim_magma"]] <- paste0("g1000_",pop,".bim")
+    files_to_check[["1000g_fam_magma"]] <- paste0("g1000_",pop,".fam")
+    files_to_check[["1000g_bed_magma"]] <- paste0("g1000_",pop,".bed")
+    files_to_check[["geneloc_magma"]] <- c("NCBI37.3.hgnc.gene.loc", "NCBI38.hgnc.gene.loc",
+                                           "NCBI37.3.entrez.gene.loc", "NCBI38.entrez.gene.loc")
+  }
+  if (for_which %in% c("all", "snpsea")) {
+    if (get_os()=="linux") {
+      files_to_check[["snpsea_binary"]] <- "snpsea-linux64"
+    } else if (get_os()=="osx") {
+      files_to_check[["snpsea_binary"]] <- "snpsea-osx"
+    } else if (get_os()=="windows") {
+      files_to_check[["snpsea_binary"]] <- "snpsea.exe"
+    }
+    
+    # SNPsea data
+    files_to_check[["1000g_6colbed_snpsea"]] <- "TGP2011.bed.gz" # 1000G EUR linkage intervals # No other population provided yet, but am interested in figuring how to best do this
+    files_to_check[["txt_snpsea"]] <- "Lango2010.txt.gz" # EUR LD-pruned SNPs
+    files_to_check[["geneloc_snpsea"]] <- c("NCBIgenes2013_hgnc.bed.gz", "NCBIgenes2013_entrez.bed.gz")
+  }
+  
+  # Now, checking that all the requested (all/magma/ldsc/snpsea) files exist in an absolute path:
+  i=1
+  while (i <= length(files_to_check)) {
+    if (!all(file.exists(paste0(system.file(package="gwascelltyper"), "/extdata/", files_to_check[[i]])))) {
+      answer <- utils::askYesNo(paste0("The dependency files in category: ",
+                                       names(files_to_check)[i], ", are not downloaded or missing,",
+                                       "\nand thus you either need to download the dependency data (Yes),",
+                                       "\nor cancel this job for the moment (No/Cancel):"),
+                                default = FALSE)
+      if (isTRUE(answer)) {
+        download_dependencies()
+        i=0 # This will be increased to one at the end of the loop structure, so the loop resets (all files are checked again)
+      } else {
+        stop(paste0("ERROR: The dependency files in category: ", names(files_to_check)[i], ", are missing for population ",pop,"."))
+      }
+    }
+    i = i+1
+  }
+  
+  # Processing some paths a bit before sending to the wrapper function:
+  
+  # Now, return the named list of the dependency data
+  return(files_to_check)
+}
 
 #' Download dependencies
 #'
@@ -62,7 +154,7 @@ download_dependencies <- function(address = paste0(system.file(package="gwascell
   }
   
   # MAGMA executable --------
-  if (askYesNo("Do you want to download the SNPsea executable?")) {
+  if (askYesNo("Do you want to download the MAGMA executable?")) {
     if (get_os() == "windows") {
       utils::download.file(url = "https://ctg.cncr.nl/software/MAGMA/prog/magma_v1.10_win.zip", destfile = paste0(address, "magma_v1.10_win.zip"))
       utils::unzip(paste0(address,"magma_v1.10_win.zip"), exdir = address)
@@ -82,13 +174,13 @@ download_dependencies <- function(address = paste0(system.file(package="gwascell
   }
   
   # SNPsea data --------
-  required_files_for_snpsea <- c("Lango2010.txt.gz", "TGP2011.bed.gz", "NCBIgenes2013.bed.gz")
-  if (sum(required_files_for_snpsea %in% list.files(address)) != 3) {
+  required_files_for_snpsea <- c("Lango2010.txt.gz", "TGP2011.bed.gz", "NCBIgenes2013_hgnc.bed.gz", "NCBIgenes2013_entrez.bed.gz")
+  if (sum(required_files_for_snpsea %in% list.files(address)) != 4) {
     if (askYesNo("Do you want to download the SNPsea dependencies for the eur population? (recommended yes)")) {
       cat("Downloading the SNPsea data.\n")
       utils::download.file(url = "http://files.figshare.com/1504037/SNPsea_data_20140520.zip",
                            destfile = paste0(address, "SNPsea_data_20140520.zip"))
-      utils::unzip(zipfile = paste0(address, "SNPsea_data_20140520_bak.zip"),
+      utils::unzip(zipfile = paste0(address, "SNPsea_data_20140520.zip"),
                    exdir = address)
       # Reformatting some dependency data, won't take long.
       x <- read.table(file = paste0(address, "NCBIgenes2013.bed.gz"))[,c(1,2,3,5,4)]
