@@ -55,7 +55,7 @@ dep_path <- function(pop = c("eur", "afr", "amr", "eas", "sas")[1],
                                                paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M_5_50"))
     deps[["1000g_annot_ldsc"]] <- paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".annot.gz")
     # I think this may actually not be needed, need to check later ^
-    deps[["hm3snps_ldsc"]] <- paste0("hapmap3_snps/hm", 1:22, ".snp")
+    deps[["hm3snps_ldsc"]] <- paste0("hapmap3_snps/hm.", 1:22, ".snp")
     deps[["geneloc_ldsc"]] <- "refGene_coord.txt"
   }
   if (for_which %in% c("all", "magma")) {
