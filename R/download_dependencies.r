@@ -258,7 +258,7 @@ download_dependencies <- function(address = paste0(system.file(package="gwascell
   
   # LDSC executable scripts & environments --------
   if (utils::askYesNo("Do you want to download the LDSC scripts?")) {
-    system(paste0("cd ", address, " && git clone https://github.com/bulik/ldsc.git && mv ./ldsc/*",
+    system(paste0("cd ", address, " && git clone https://github.com/bulik/ldsc.git && mv ./ldsc/* ",
                   "./ && conda env create --file environment.yml && source activate ldsc",
                   "&& conda deactivate"))
   }
