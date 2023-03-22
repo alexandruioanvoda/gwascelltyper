@@ -113,7 +113,7 @@ dep_path <- function(pop = c("eur", "afr", "amr", "eas", "sas")[1],
     # deps$gene_coord is now deps$geneloc_ldsc
     deps$bim_prefix <- substr(deps[["1000g_bim_ldsc"]][1], 1,
                               nchar(deps[["1000g_bim_ldsc"]][1])-5)
-    deps$print_snps <- substr(deps[["1000g_bim_ldsc"]][1], 1,
+    deps$print_snps <- substr(deps[["hm3snps_ldsc"]][1], 1,
                               nchar(deps[["hm3snps_ldsc"]][1])-5)
     deps$ref_ld_chr <- substr(deps[["1000g_ldscore_category_ldsc"]][1], 1,
                               nchar(deps[["1000g_ldscore_category_ldsc"]][1])-15)

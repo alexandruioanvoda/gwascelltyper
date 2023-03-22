@@ -37,7 +37,7 @@ Soon, we intend to add the following features:
 
 CRAN pre-requisites: `install.packages(c("data.table","doParallel", "R.utils"))`. `Git` and `conda` are needed to install the `LDSC` environment, but only if you want to use `LDSC`. `tar`, `gunzip` and `wget` are required to automatically download the `MAGMA` & `LDSC`-formatted 1000G & HapMap data, which are required for these analyses.
 
-To install this package, run: `devtools::install_bitbucket("alexandru_ioan_voda/cell_typing_package")`
+To install this package, run: `devtools::install_github("alexandruioanvoda/gwascelltyper")`
 
 After installing the lightweight code through the previous command, you must run `download_dependencies(population = "eur")` (or `afr`, `eas`, etc. run `?download_dependencies()` for details) to download the required baseline data (LD reference panels & others, approx. 2 to 6GB on disk, depending on what populations and packages you need). After answering the questions this function asks, you will be able to run your analyses.
 
