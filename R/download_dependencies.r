@@ -45,17 +45,17 @@ dep_path <- function(pop = c("eur", "afr", "amr", "eas", "sas")[1],
     deps[["ldsc_scripts"]] <- c("ldsc.py", "make_annot.py")
     
     # LDSC data
-    deps[["1000g_bim_ldsc"]] <- paste0("1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".bim")
-    deps[["1000g_fam_ldsc"]] <- paste0("1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".fam")
-    deps[["1000g_bed_ldsc"]] <- paste0("1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".bed")
-    deps[["1000g_frq_ldsc"]] <- paste0("1000G_",popu,"_Phase3_frq/1000G.",popu,".QC.",1:22,".frq")
-    deps[["1000g_ldscore_universal_ldsc"]] <- paste0("1000G_",popu,"_Phase3_weights_hm3_no_hla/weights.",1:22,".l2.ldscore.gz")
-    deps[["1000g_ldscore_category_ldsc"]] <- paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.ldscore.gz")
-    deps[["1000g_m_m550_ldsc"]] <- c(paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M"),
-                                               paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M_5_50"))
-    deps[["1000g_annot_ldsc"]] <- paste0("1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".annot.gz")
+    deps[["1000g_bim_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".bim")
+    deps[["1000g_fam_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".fam")
+    deps[["1000g_bed_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_plink/1000G.",popu,".QC.",1:22,".bed")
+    deps[["1000g_frq_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_frq/1000G.",popu,".QC.",1:22,".frq")
+    deps[["1000g_ldscore_universal_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_weights_hm3_no_hla/weights.",1:22,".l2.ldscore.gz")
+    deps[["1000g_ldscore_category_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.ldscore.gz")
+    deps[["1000g_m_m550_ldsc"]] <- c(paste0("EUR_complete/1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M"),
+                                               paste0("EUR_complete/1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".l2.M_5_50"))
+    deps[["1000g_annot_ldsc"]] <- paste0("EUR_complete/1000G_",popu,"_Phase3_baseline/baseline.", 1:22, ".annot.gz")
     # I think this may actually not be needed, need to check later ^
-    deps[["hm3snps_ldsc"]] <- paste0("hapmap3_snps/hm.", 1:22, ".snp")
+    deps[["hm3snps_ldsc"]] <- paste0("EUR_complete/hapmap3_snps/hm.", 1:22, ".snp")
     deps[["geneloc_ldsc"]] <- "refGene_coord.txt"
   }
   if (for_which %in% c("all", "magma")) {
