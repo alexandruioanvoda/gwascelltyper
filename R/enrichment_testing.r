@@ -277,7 +277,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
     gc()
     for (j in seq(from = 1, to = 22, by = 1)) {
       command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", deps$ldsc_scripts[1], " --l2 --bfile ",
-                        deps$bim_prefix, as.character(j), " --ld-wind-cm ", deps$ld_wind_cm,
+                        deps$bim_prefix, as.character(j), " --ld-wind-cm ", ld_wind_cm,
                         " --annot ", output_dir, "/celltype.", as.character(i), ".", as.character(j), ".annot.gz",
                         " --thin-annot --out ", output_dir, "/celltype.", as.character(i), ".", as.character(j),
                         " --print-snps ", deps$print_snps, as.character(j), ".snp")
@@ -296,7 +296,7 @@ compute_LDSC_enrichment_discrete <- function(gene_sets, sumstats_file, output_di
   foreach::foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
     gc()
     command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", deps$ldsc_scripts[1], " --l2 --bfile ",
-                      deps$bim_prefix, as.character(j), " --ld-wind-cm ", deps$ld_wind_cm,
+                      deps$bim_prefix, as.character(j), " --ld-wind-cm ", ld_wind_cm,
                       " --annot ", output_dir, "/control.", as.character(j), ".annot.gz",
                       " --thin-annot --out ", output_dir, "/control.", as.character(j),
                       " --print-snps ", deps$print_snps, as.character(j), ".snp")
@@ -1026,5 +1026,8 @@ gene_object_renamer <- function(gobj) {
     stop("Gene expression object is not a list or matrix.")
   }
 }
+
+
+
 
 
