@@ -9,11 +9,9 @@ map_SNPs_to_genes_for_MAGMA(
   upstream_kb = 10,
   downstream_kb = 1.5,
   N = NULL,
-  population = "eur",
+  pop = "eur",
   gene_nomenclature = "hgnc",
-  genome_ref_path = paste0(system.file(package = "gwascelltyper"), "/extdata/g1000_",
-    population),
-  magma_path = paste0(system.file(package = "gwascelltyper"), "/extdata/magma-linux64")
+  deps = dep_path(pop, "magma")
 )
 }
 \arguments{
@@ -25,13 +23,11 @@ map_SNPs_to_genes_for_MAGMA(
 
 \item{N}{Default = NULL}
 
-\item{population}{Default = eur}
+\item{pop}{Default = eur}
 
 \item{gene_nomenclature}{Default = hgnc}
 
-\item{genome_ref_path}{Path to g1000 dependency files. Depends on population used.}
-
-\item{magma_path}{Path to MAGMA executable.}
+\item{deps}{A named list, containing all of the dependencies for MAGMA (e.g. executables, SNP linkage disequilibrium data, etc.). Provided by default by another function, called gwascelltyper::dep_path().}
 }
 \value{
 Character

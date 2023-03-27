@@ -8,7 +8,7 @@ get_magma_paths(
   sumstats_file,
   upstream_kb,
   downstream_kb,
-  population,
+  pop,
   gene_nomenclature
 )
 }
@@ -19,7 +19,7 @@ get_magma_paths(
 
 \item{downstream_kb}{Kilobases downstream of gene to add.}
 
-\item{population}{Population (default = eur)}
+\item{pop}{Population (default = eur)}
 
 \item{gene_nomenclature}{Gene nomenclature (default = hgnc)}
 }

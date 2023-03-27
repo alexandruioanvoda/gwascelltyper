@@ -10,9 +10,9 @@ dep_path(
 )
 }
 \arguments{
-\item{pop}{Reference population shortcode (right now: afr, amr, eas, eur, sas).}
+\item{pop}{Reference population shortcode (available right now: eur; Soon to be added: afr, amr, eas, eur, sas).}
 
-\item{for_which}{Which softwares to check (right now: all, magma, snpsea or ldsc).}
+\item{for_which}{Which softwares to check (available right now: all, magma, snpsea or ldsc).}
 }
 \value{
 Named list (of paths)

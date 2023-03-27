@@ -1,0 +1,70 @@
+---
+title: "Block jackknife joint GWAS enrichment test"
+author: "Alexandru Ioan Voda"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Block jackknife joint test}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+## Installing the package and downloading the dependencies
+
+For the final function of these lines, accept the download and installation of MAGMA and LDSC (and their model weights and data dependencies):
+
+```{r eval=FALSE}
+if (!require("gwascelltyper", quietly = TRUE))
+    devtools::install_github("alexandruioanvoda/gwascelltyper")
+
+# once installed:
+library("gwascelltyper")
+download_dependencies(population = "eur")
+```
+
+## Running the block jackknife test
+
+To just load some pre-processed block jackknife data and run the final test on them, we can now just do the following:
+```{r eval=FALSE}
+download.file(url = "https://s3.tebi.io/bjk-vignette/bjk_vignette.tgz",
+              destfile = "bjk_vignette.tgz")
+utils::untar("bjk_vignette.tgz") # This unzips into a folder called "To_share".
+
+library("gwascelltyper")
+mat <- readRDS("./To_share/bjk_last_step_data.rds")
+head(mat)
+finalStep_bjk_joint_test(mat)
+```
+
+Here, we can see that the P-value for dendritic cells (DC) tested with Crohn's disease GWAS sumstats is much more confident (Z=6.97) in the block jackknife joint test than in MAGMA (Z=5.6) or LDSC (Z=4.8) alone.
+
+## Running it from A to Z?
+
+To get a matrix like `mat`, we can run the `compute_bjk_enrichment_discrete()` function, which also computes the above `bjk` Z-score as well, by default.
+
+```{r eval=FALSE}
+library("gwascelltyper")
+gene_sets <- readRDS("./To_share/geneset.rds")[c("DC", "All_genes_control")]
+# We're subsetting to just one gene-set (DC -> dendritic cells)
+# and the control (background) gene-set.
+
+results <- compute_bjk_enrichment_discrete(gene_sets = gene_sets,
+                                sumstats_files = c("./To_share/magma_CD.gwas", "./To_share/ldsc_CD.gwas.gz"),
+                                output_dir = "./To_share/interm", # where we'll store our intermediary files.
+                                pop = "eur",
+                                n_blocks = 200,
+                                number_of_threads = 1) # On macbooks, this can be increased to 2 or 3 to increase the computation speed
+
+results[[2]] # The matrix with delete-n values
+results[[1]] # The final bjk, magma and ldsc values
+```
+
+This function can take a lot of time to run, and creates a lot of dependency files. Make sure you have a few free gigabytes of storage.
+

@@ -5,11 +5,14 @@
 \title{Download dependencies}
 \usage{
 download_dependencies(
-  address = paste0(system.file(package = "gwascelltyper"), "/extdata/")
+  address = paste0(system.file(package = "gwascelltyper"), "/extdata/"),
+  pop = c("eur", "eas", "afr", "amr", "sas", "subpop")[1]
 )
 }
 \arguments{
 \item{address}{Path where dependencies are downloaded. Do not modify, parameter meant for developers.}
+
+\item{pop}{Population to download LD data for (available right now: eur; available soon: eas, afr, amr, sas, subpop).}
 }
 \value{
 Path

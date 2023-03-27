@@ -12,11 +12,9 @@ compute_MAGMA_enrichment_discrete(
   upstream_kb = 10,
   downstream_kb = 1.5,
   gene_nomenclature = "hgnc",
-  population = "eur",
+  pop = "eur",
   gwas_sample_size = NULL,
-  genome_ref_path = paste0(system.file(package = "gwascelltyper"), "/extdata/g1000_",
-    population),
-  magma_path = paste0(system.file(package = "gwascelltyper"), "/extdata/magma-linux64")
+  deps = dep_path(pop, "magma")
 )
 }
 \arguments{
@@ -34,13 +32,11 @@ compute_MAGMA_enrichment_discrete(
 
 \item{gene_nomenclature}{Type of gene IDs fed in from the expression data (default = hgnc; alternatives = entrez).}
 
-\item{population}{Word describing ancestry of the GWAS data. Relevant so that the proper LD panel will be used (default = eur; alternatives = afr, amr, eas, sas, subpop)}
+\item{pop}{Word describing ancestry of the GWAS data. Relevant so that the proper LD panel will be used (default = eur; alternatives = afr, amr, eas, sas, subpop)}
 
 \item{gwas_sample_size}{Sample size of GWAS.}
 
-\item{genome_ref_path}{Path to genome references for MAGMA (default = packageLocation/extdata/magma/g1000_eur).}
-
-\item{magma_path}{Path to MAGMA executable (default is in package extdata folder, where download_dependencies() should store it).}
+\item{deps}{A named list, containing all of the dependencies for MAGMA (e.g. executables, SNP linkage disequilibrium data, etc.). Provided by default by another function, called gwascelltyper::dep_path().}
 }
 \value{
 Dataframe

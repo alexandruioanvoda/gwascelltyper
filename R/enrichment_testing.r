@@ -1028,321 +1028,474 @@ gene_object_renamer <- function(gobj) {
 }
 
 
-#' Compute the block jackknife joint test discrete
+#' Complete block jackknife joint test
 #'
 #' Compute GWAS enrichment in discrete lists of genes with the block jackknife joint test.
 #'
 #' @param gene_sets List of genesets. Each geneset must be a character vector, containing HGNC gene names.
-#' @param sumstats_files Addresses of properly formatted MAGMA, LDSC and SNPsea files for GWAS summary statistics.
-#' @param blocks Number of block to split the genome into (parameter for the jackknife).
+#' @param sumstats_files Addresses of properly formatted MAGMA and LDSC-formatted files for GWAS summary statistics.
 #' @param output_dir Folder where you want the output to be stored. Default = NULL, which makes this function create a directory where results will be temporarily stored. The directory will be deleted afterwards, if this parameter is null. The only output will be the return. Otherwise, both the files and the return are kept.
 #' @param pop Word describing ancestry of the GWAS data. Relevant so that the proper LD panel will be used (default = eur; alternatives = afr, amr, eas, sas, subpop)
-#' @param n_blocks The number of blocks to split the genome into.
+#' @param n_blocks The number of blocks to split the genome into (default = 200).
 #' @param number_of_threads Number of threads to parallelize over.
 #'
+#' @import dplyr
 #' @import doParallel
 #' @import data.table
 #' @importFrom R.utils gzip
 #' @importFrom R.utils compressFile
 #' @importFrom utils write.table
 #'
+#' @return List
+#'
+#' @export
+compute_bjk_enrichment_discrete <- function(gene_sets,
+                                            sumstats_files,
+                                            output_dir,
+                                            pop = "eur",
+                                            n_blocks = 200,
+                                            number_of_threads = 1) {
+  # Check: gene_sets <- geneset; sumstats_files= c("/Users/avoda/Desktop/Packages/NewPackageRepo/example_bjk/magma_CD.gwas", "/Users/avoda/Desktop/Packages/NewPackageRepo/example_bjk/ldsc_CD.gwas.gz"); output_dir = "/Users/avoda/Desktop/Packages/NewPackageRepo/example_bjk/interm"; pop = "eur"; n_blocks = 200; number_of_threads = 1
+  # Boilerplate checks
+  require(dplyr)
+  if (!all(file.exists(sumstats_files))) {stop(paste0("One of the ",length(sumstats_files)," sumstats files is missing.\n"))}
+  if (is.null(output_dir)) {
+    output_dir <- tempdir(check = TRUE)
+    cat("Temporary directory for LDSC files is", output_dir, "\nTemporary dir will be deleted after the analysis is done.\n")
+  }
+  else {
+    store_results = TRUE
+    # Make sure that the output dir ends without forward slash
+    if (substr(output_dir, nchar(output_dir), nchar(output_dir)) == "/") output_dir <- gsub('.{1}$', '', output_dir)
+    if (!dir.exists(output_dir)) {
+      cat("Output dir supplied does not exist. Creating ", output_dir, "\n")
+      dir.create(output_dir)
+    }
+  }
+  
+  # Redefining some functions.
+  # This should be later be done as a rewrite of the original functions in place, as opposed to them being duplicated and enriched in functionality here.
+  
+  compute_LDSC_enrichment_discrete_blocked <- function(gene_sets, sumstats_file, output_dir = NULL, number_of_threads = 1, window_size = 100000, pop = "eur", ld_wind_cm = 1, block,
+                                                       deps = dep_path(pop, "ldsc")) {
+    # Checks
+    if (is.null(gene_sets)) {stop("What gene sets?")}
+    if (is.null(sumstats_file)) {stop("What sumstats file?")}
+    if (!file.exists(sumstats_file)) {stop("GWAS sumstats file does not exist at provided path.")}
+    # dep_path() already checks the existence of the other required files!
+    
+    
+    # A few other boilerplate checks:
+    window_size <- format(window_size, scientific = FALSE)
+    if (names(gene_sets)[length(gene_sets)] != "All_genes_control") stop("No <All_genes_control> contained within the last geneset from the gene_sets object.")
+    gobj <- gwascelltyper:::gene_object_renamer(gene_sets)
+    gene_sets <- gobj$gobj
+    
+    cat("LDSC enrichment analysis started at:", as.character(Sys.time()), "\n")
+    
+    # Boiler plate code in case user wants to store intermediary and output files somewhere permanent instead of the default path (default = a temporary directory, that is erased after the run).
+    store_results = FALSE
+    if (is.null(output_dir)) {
+      output_dir <- tempdir(check = TRUE)
+      cat("Temporary directory for LDSC files is", output_dir, "\nTemporary dir will be deleted after the analysis is done.\n")
+    }
+    else {
+      store_results = TRUE
+      
+      # Make sure that the output dir ends without forward slash
+      if (substr(output_dir, nchar(output_dir), nchar(output_dir)) == "/") {
+        output_dir <- gsub('.{1}$', '', output_dir)
+      }
+      
+      if (!dir.exists(output_dir)) {
+        cat("Output dir supplied does not exist. Creating ", output_dir, "\n")
+        dir.create(output_dir)
+      }
+    }
+    
+    if (!file.exists(paste0(output_dir, "/main.ldcts"))) {
+      cat("Starting computations required for gene-set LD-scoring.")
+      print("LDSC consumes a lot of RAM memory, so we are calling garbage collection in R now, before proceeding to the analysis.")
+      gc()
+      doParallel::registerDoParallel(cores=number_of_threads)
+      
+      print("Writing lists of genes to files and making thin-annots for each gene set...")
+      foreach::foreach(i=1:(length(gene_sets)-1), .options.snow=list(preschedule=TRUE)) %dopar% {
+        gc()
+        geneset_file <- paste0(output_dir, "/genes_", gsub(" ", "_", names(gene_sets)[i]), "_list.txt") # The gsub command is the cell name
+        con <- file(geneset_file)
+        writeLines(gene_sets[[i]], con)
+        close(con)
+        for (j in seq(from = 1, to = 22, by = 1)) { # Compute annot file / each chromosome
+          command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", deps$ldsc_scripts[2], " --gene-set-file ",
+                            geneset_file, " --gene-coord-file ", deps$geneloc_ldsc,
+                            " --windowsize ", window_size,
+                            " --bimfile ", deps$bim_prefix, as.character(j), ".bim ",
+                            "--annot-file ", output_dir, "/celltype.", as.character(i), ".", as.character(j), ".annot.gz")
+          print(command)
+          system(command = command)
+        }
+      }
+      
+      print("Calling garbage collection now, to free memory after the thin-annot parallel operations done by DoParallel.")
+      gc()
+      
+      print("Write list of all genes (for control)")
+      geneset_file <- paste0(output_dir, "/genes_controls_list.txt")
+      con <- file(geneset_file)
+      writeLines(gene_sets[[length(gene_sets)]], con) # gene_sets[[length(gene_sets)]] is the control set (vector with all genes)
+      close(con)
+      # Make thin-annot for control too
+      foreach::foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
+        gc()
+        command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", deps$ldsc_scripts[2], " --gene-set-file ",
+                          geneset_file, " --gene-coord-file ", deps$geneloc_ldsc,
+                          " --windowsize ", window_size,
+                          " --bimfile ", deps$bim_prefix, as.character(j), ".bim ",
+                          "--annot-file ", output_dir, "/control.", as.character(j), ".annot.gz")
+        print(command)
+        system(command = command)
+      }
+      
+      
+      print("Calling garbage collection now, to free memory after the <control> thin-annot parallel operations done by DoParallel.")
+      gc()
+      
+      cat("Thin annot making finished at:", as.character(Sys.time()), "\n")
+      
+      print("Writing LDCTS file, line for each cell type")
+      for (i in 1:(length(gene_sets)-1)) {
+        # Get cell type name
+        cell <- names(gene_sets)[i]; cell <- gsub(" ", "_", cell); print(cell)
+        # Write line to LDCTS
+        ldcts_line <- paste(cell, paste0(output_dir, "/celltype.", as.character(i), ".,", output_dir, "/control."), sep = "\t")
+        write(ldcts_line, file=paste0(output_dir, "/main.ldcts"), append=TRUE)
+      }
+      
+      
+      print("Computing LD for each gene-set / each chromosome.")
+      foreach::foreach(i=1:(length(gene_sets)-1), .options.snow=list(preschedule=TRUE)) %dopar% {
+        gc()
+        for (j in seq(from = 1, to = 22, by = 1)) {
+          command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", deps$ldsc_scripts[1], " --l2 --bfile ",
+                            deps$bim_prefix, as.character(j), " --ld-wind-cm ", ld_wind_cm,
+                            " --annot ", output_dir, "/celltype.", as.character(i), ".", as.character(j), ".annot.gz",
+                            " --thin-annot --out ", output_dir, "/celltype.", as.character(i), ".", as.character(j),
+                            " --print-snps ", deps$print_snps, as.character(j), ".snp")
+          print(command)
+          system(command = command)
+        }
+      }
+      
+      
+      print("Calling garbage collection now, to free memory after the LD/geneset parallel operations done by DoParallel.")
+      gc()
+      
+      
+      # Compute LD for the control too
+      print("Compute LD for the control too")
+      foreach::foreach(j=1:22, .options.snow=list(preschedule=TRUE)) %dopar% {
+        gc()
+        command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python ", deps$ldsc_scripts[1], " --l2 --bfile ",
+                          deps$bim_prefix, as.character(j), " --ld-wind-cm ", ld_wind_cm,
+                          " --annot ", output_dir, "/control.", as.character(j), ".annot.gz",
+                          " --thin-annot --out ", output_dir, "/control.", as.character(j),
+                          " --print-snps ", deps$print_snps, as.character(j), ".snp")
+        print(command)
+        system(command = command)
+      }
+      cat("LD scoring finished at:", as.character(Sys.time()), "\n")
+      registerDoSEQ() # This finishes the parallel backend
+      gc()
+    } else {cat("LD-scoring files for the gene-sets exist already in the output directory,", output_dir, "\nSo the enrichment analysis will be ran on them instead of generating new LD scores.'n")}
+    
+    # This command actually returns the P-values for each celltype against the GWAS trait
+    print("This command actually returns the P-values for each cell type against the GWAS trait")
+    command <- paste0("source activate ldsc && OPENBLAS_NUM_THREADS=", number_of_threads, " MKL_NUM_THREADS=", number_of_threads, " python2 ", deps$ldsc_scripts[1], " --h2-cts ", sumstats_file,
+                      " --ref-ld-chr ", deps$ref_ld_chr, " ",
+                      "--out ", output_dir, "/ldsc_final_output_", block, " ",
+                      "--ref-ld-chr-cts ", output_dir, "/main.ldcts ",
+                      "--w-ld-chr ", deps$w_ld_chr)
+    print(command)
+    system(command)
+    print("Done. Returning results dataframe.")
+    
+    # Here we build the results dataframe for plotting.
+    results <- utils::read.table(paste0(output_dir, "/ldsc_final_output_",block,".cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
+    colnames(results)[4] <- "P_value"
+    results$Name <- gobj$gsn$orig_names[match(results$Name, gobj$gsn$temp_names)]
+    
+    # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
+    if (!store_results) unlink(output_dir, recursive = TRUE)
+    
+    return(results)
+  }
+  compute_MAGMA_enrichment_discrete_blocked <- function(gene_sets, block_gtto_path = NULL, output_dir, sumstats_file, gwas_sample_size = NULL,
+                                                        upstream_kb = 10, downstream_kb = 1.5, gene_nomenclature = "hgnc", population = "eur",
+                                                        genome_ref_path = paste0(system.file(package = "gwascelltyper"), "/extdata/g1000_", population),
+                                                        magma_path = paste0(system.file(package = "gwascelltyper"), "/extdata/magma")) {
+    if (!is.null(block_gtto_path)) {if (!file.exists(block_gtto_path)) {stop(paste0("block_gtto_path does not exist: ", block_gtto_path))}}
+    if (is.null(gene_sets)) {
+      stop("What gene sets?")
+    }
+    if (is.null(sumstats_file)) {
+      stop("What sumstats file?")
+    }
+    if (is.null(genome_ref_path)) {
+      stop("What MAGMA input genome_ref_path param?")
+    }
+    if (!file.exists(sumstats_file)) {
+      stop("GWAS summary statistics file doesn't exist.")
+    }
+    prefix <- get_magma_paths(sumstats_file, upstream_kb, downstream_kb, population, gene_nomenclature)
+    if (!(file.exists(paste0(prefix, ".genes.annot")) &
+          file.exists(paste0(prefix, ".genes.out")) &
+          file.exists(paste0(prefix, ".genes.raw")))) {
+      stop(".genes.annot file containing the mapping of SNPs (from the supplied sumstats file) to genes not found.")
+    }
+    
+    sumstats_file = path.expand(sumstats_file)
+    analysis_name = basename(block_gtto_path)
+    
+    if ("All_genes_control" %in% names(gene_sets)) {
+      cat("Removing geneset called 'All_genes_control', as this is a competitive analysis (not self-contained).\n")
+      gene_sets <- gene_sets[-which(names(gene_sets) == "All_genes_control")]
+    }
+    
+    cat("Generating gene_covars.\n")
+    geneCovarFile_contents <- NULL
+    for (set in 1:length(gene_sets)) {
+      if (length(gene_sets[[set]]) == 0) 
+        stop(paste0("Gene set #", set, " doesn't contain any gene."))
+      cat("Geneset ", names(gene_sets)[set], " contains ", 
+          length(gene_sets[[set]]), " genes.\n")
+      geneCovarFile_contents[set] <- paste0(names(gene_sets)[set], " ", paste(gene_sets[[set]], collapse = " "))
+    }
+    geneCovarFile = tempfile(pattern = "geneCovarFile", tmpdir = output_dir)
+    cat("Writing gene_covar file to", geneCovarFile, "\n")
+    write.table(geneCovarFile_contents, file = geneCovarFile, 
+                quote = FALSE, row.names = FALSE, sep = "\t", col.names = FALSE)
+    cat("Making sure MAGMA is chmod +x.\n")
+    system(paste0("chmod +x ", magma_path))
+    magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s' --settings gene-exclude='%s'", 
+                        magma_path, prefix, geneCovarFile, output_dir, analysis_name, block_gtto_path)
+    if (is.null(block_gtto_path)) {
+      magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s'", 
+                          magma_path, prefix, geneCovarFile, output_dir, analysis_name)
+    }
+    print(magma_cmd)
+    invisible(system(magma_cmd, intern=TRUE))
+    res = read.table(paste0(output_dir, "/", analysis_name, 
+                            ".gsa.out"), stringsAsFactors = FALSE, header = TRUE)
+    if ("FULL_NAME" %in% colnames(res)) {
+      res <- res[, -which(colnames(res) == "VARIABLE")]
+      colnames(res)[which(colnames(res) == "FULL_NAME")] <- "Name"
+      res <- res[, 7:1]
+      colnames(res)[2] <- "P_value"
+    } else {
+      colnames(res)[which(colnames(res) == "VARIABLE")] <- "Name"
+      colnames(res)[which(colnames(res) == "P")] <- "P_value"
+      res <- res[, c(1, 7, 2:6)]
+    }
+    return(res)
+  }
+  
+  # Whole data estimates for
+  # LDSC:
+  wds_ldsc <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                       sumstats_file = sumstats_files[2],
+                                                       number_of_threads = number_of_threads,
+                                                       output_dir = output_dir,
+                                                       block = 0,
+                                                       deps = dep_path(pop, "ldsc"))
+  wds_ldsc$BLOCK = 0
+  wds_ldsc$method = "ldsc"
+  # MAGMA:
+  wds_magm <- compute_MAGMA_enrichment_discrete(gene_sets = gene_sets,
+                                                sumstats_file = sumstats_files[1],
+                                                gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N,
+                                                deps = dep_path(pop, "magma"))
+  wds_magm$BLOCK = 0
+  wds_magm$method = "magma"
+  #wds_snps <- compute_SNPSEA_enrichment_discrete() # To be added later on, when SNPsea is nativised to R or after this issue is fixed: https://github.com/slowkow/snpsea/issues/6.
+  require(dplyr)
+  res <- do.call("rbind", list(
+    wds_magm %>% select(Name, P_value, BLOCK, method),
+    wds_ldsc %>% select(Name, P_value, BLOCK, method)
+  ))
+  res$Z <- qnorm(1 - res$P_value)
+  saveRDS(res, paste0(output_dir, "/res_0.rds"))
+  
+  # Splitting the genome into N_block pieces
+  magma_files_prefix = paste0(dirname(sumstats_files[1]), "/MAGMA_Files/", basename(sumstats_files[1]), ".10UP.1.5DOWN_",pop,"_hgnc.genes.")
+  # Create block intervals and SNPsea sumstats
+  smagma <- data.table::fread(sumstats_files[1])
+  suldsc <- data.table::fread(sumstats_files[2])
+  #ssnpse <- data.table::fread(sumstats_files[3])
+  cat("Roughly these many SNPs per block in the MAGMA sumstats:", ceiling(nrow(smagma)/n_blocks), "\n")
+  chunker <- function(x, n) split(x, cut(seq_along(x), n, labels = FALSE)) # taken from: https://stackoverflow.com/questions/3318333/split-a-vector-into-chunks
+  blocks <- chunker(1:nrow(smagma), n_blocks)
+  margins_list <- list()
+  for (i in 1:n_blocks) {
+    cat("Doing block", i, "of", n_blocks,"\n")
+    stto <- smagma$SNP[blocks[[i]]] # stto stands for SnpsToTakeOut
+    
+    sumstats_ldsc_s <- suldsc[!(suldsc$SNP %in% stto),]
+    data.table::fwrite(sumstats_ldsc_s, sep = "\t", file = paste0(output_dir, "/ldsc_block_", i, ".gwas.gz"))
+    
+    # Retain the basepair region taken out, and write it to a separate file so that we can also later take out genes from the gene-set that is tested for enrichment (if said genes completely span the basepair-region).
+    lidx <- blocks[[i]][1]
+    ridx <- blocks[[i]][length(blocks[[i]])]
+    margins <- as.data.frame(do.call("cbind", list(smagma[lidx,c("CHR", "BP")],
+                                                   smagma[ridx,c("CHR", "BP")],
+                                                   max(smagma$BP[smagma$CHR == smagma$CHR[lidx]]),
+                                                   min(smagma$BP[smagma$CHR == smagma$CHR[ridx]]),
+                                                   i
+    )))
+    colnames(margins) <- c("LCHR", "LBP", "RCHR", "RBP", "LMAX", "RMIN", "BLOCK")
+    margins_list[[i]] <- margins
+  } 
+  margins_df <- do.call("rbind", margins_list)
+  data.table::fwrite(margins_df, sep = "\t", file = paste0(output_dir, "/blockintervals.tsv"))
+  rm(margins_list, smagma, suldsc, margins_df, margins, lidx, ridx, stto, i, chunker, blocks); gc()
+  bi <- as.data.frame(data.table::fread(paste0(output_dir, "/blockintervals.tsv")))
+  outf <- as.data.frame(data.table::fread(paste0(magma_files_prefix, "out")))
+  annotf <- readLines(paste0(magma_files_prefix, "annot"))
+  annot_genes <- unlist(lapply(strsplit(annotf, "\t", fixed = TRUE), "[[", 1)) # this is an index for the genes in annotf
+  gtto <- list() # list of GenesToTakeOut
+  for (i in 1:n_blocks) {
+    cat("doing block",i,"of",n_blocks,"\n")
+    # Determine the genes that need to be taken out from this block
+    region <- bi[bi$BLOCK==i,]
+    genes_to_take_out <- vector()
+    if (region$LCHR == region$RCHR) { # Then this isn't a block that spans two chromosomes.
+      genes_to_take_out <- outf$GENE[outf$CHR == region$LCHR & outf$START >= region$LBP & outf$STOP <= region$RBP]
+    } else { # Then this is a block that spans two chromosomes. # But what if this spans 3 or more chromosomes? (e.g. only 5 blocks per genome) Maybe fix this, for speed runs.
+      genes_to_take_out <- outf$GENE[(outf$CHR == region$LCHR & outf$START >= region$LBP) | 
+                                       (outf$CHR == region$RCHR & outf$STOP <= region$RBP)]
+    }
+    if (i == 1) {genes_to_take_out <- genes_to_take_out[2:length(genes_to_take_out)]} # this is a temporary solution to the ncol!=col_used bug from MAGMA v1.09b, from their geneinput.cpp file on lines 38 and 56; if you leave the first gene (with just one SNP) in, then it runs the block just fine.
+    gtto[[i]] <- genes_to_take_out
+  }
+  saveRDS(gtto, paste0(output_dir, "/gtto.rds"))
+  throw <- lapply(1:n_blocks, function(idx) {
+    writeLines(text = gtto[[idx]], con = paste0(output_dir, "/gtto_", idx, ".txt"), sep = "\n")
+  })
+  rm(bi, outf, annotf, annot_genes, region, throw, genes_to_take_out); gc()
+  
+  
+  print("LDSC consumes a lot of RAM memory, so we are calling garbage collection in R now, before proceeding to the analysis.")
+  gc()
+  
+  system.time({
+    require(doParallel)
+    require(foreach)
+    doParallel::registerDoParallel(cores=number_of_threads)
+    foreach::foreach(i=1:n_blocks, .options.snow=list(preschedule=TRUE)) %dopar% {
+      res1 <- compute_MAGMA_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                        sumstats_file = sumstats_files[1],
+                                                        output_dir = output_dir,
+                                                        block_gtto_path = paste0(output_dir, "/gtto_", i, ".txt"),
+                                                        gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N)
+      res1$BLOCK = i
+      res1$method = "magma"
+      
+      ldsc_blk_sumpath <- ifelse(
+        file.exists(paste0(output_dir,"/ldsc_block_", i, ".gwas.gz")),
+        yes = paste0(output_dir,"/ldsc_block_", i, ".gwas.gz"), # it exists, so sumstats are subsampled.
+        no = sumstats_files[2]
+      )
+      res2 <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                       sumstats_file = ldsc_blk_sumpath,
+                                                       output_dir = output_dir,
+                                                       number_of_threads = 1,
+                                                       window_size = 100000,
+                                                       block = i,
+                                                       pop = "eur", ld_wind_cm = 1,
+                                                       deps = dep_path(pop, "ldsc"))
+      res2$BLOCK = i
+      res2$method = "ldsc"
+      
+      res <- do.call("rbind", list(
+        res1 %>% select(Name, P_value, BLOCK, method),
+        res2 %>% select(Name, P_value, BLOCK, method)
+      ))
+      res$Z <- qnorm(1 - res$P_value) # You can do the qnorm here, see: identical(qnorm(1-c(0.05, 0.1, 0.7))[1:2],qnorm(1-c(0.05, 0.1))) # TRUE
+      saveRDS(res, paste0(output_dir, "/res_", i, ".rds"))
+    }
+    cat("Finished block jackknife at:", as.character(Sys.time()), "\n")
+    registerDoSEQ() # This finishes the parallel backend
+    gc()
+  })
+  
+  resss <- data.table::rbindlist(pbapply::pblapply(0:n_blocks, function(i) {
+    readRDS(paste0(output_dir, "/res_", i, ".rds"))
+  }))
+  
+  return(list(finalStep_bjk_joint_test(resss), resss))
+}
+
+
+#' Compute the block jackknife joint test discrete
+#'
+#' Compute GWAS enrichment in discrete lists of genes with the block jackknife joint test.
+#'
+#' @param mat Dataframe containing blocked enrichment estimates (block == N) of enrichment and from whole data (block == 0). Needs to have 5 columns: Name (aka gene-set), P_value, BLOCK (1:200 as index of deleted block, 0 for whole data), method (in this case, LDSC or MAGMA) and Z (Z-score obtained from P-value).
+#'
+#' @import dplyr
+#' @import tidyr
+#' @import data.table
+#' @import pbapply
+#'
 #' @return Dataframe
 #'
-# compute_bjk_enrichment_discrete <- function(gene_sets, sumstats_files, output_dir = NULL, pop = "eur", n_blocks = 200, number_of_threads) {
-#   # Boilerplate checks
-#   if (!all(file.exists(sumstats_files))) {stop(paste0("One of the ",length(sumstats_files)," sumstats files is missing.\n"))}
-#   if (is.null(output_dir)) {
-#     output_dir <- tempdir(check = TRUE)
-#     cat("Temporary directory for LDSC files is", output_dir, "\nTemporary dir will be deleted after the analysis is done.\n")
-#   }
-#   else {
-#     store_results = TRUE
-#     # Make sure that the output dir ends without forward slash
-#     if (substr(output_dir, nchar(output_dir), nchar(output_dir)) == "/") output_dir <- gsub('.{1}$', '', output_dir)
-#     if (!dir.exists(output_dir)) {
-#       cat("Output dir supplied does not exist. Creating ", output_dir, "\n")
-#       dir.create(output_dir)
-#     }
-#   }
-#   
-#   # Whole data estimates
-#   wds_ldsc <- compute_LDSC_enrichment_discrete(gene_sets = geneset[c("DC", "All_genes_control")],
-#                                                sumstats_file = sumstats_files[2],
-#                                                number_of_threads = number_of_threads,
-#                                                deps = dep_path(pop, "ldsc"))
-#   wds_magm <- compute_MAGMA_enrichment_discrete(gene_sets = geneset["DC"],
-#                                                 sumstats_file = sumstats_files[1],
-#                                                 gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N,
-#                                                 deps = dep_path(pop, "magma"))
-#   #wds_snps <- compute_SNPSEA_enrichment_discrete() # To be added later on, when SNPsea is nativised to R or after this issue is fixed: https://github.com/slowkow/snpsea/issues/6.
-#   
-#   # Splitting the genome into N_block pieces
-#   magma_files_prefix = paste0(dirname(sumstats_files[1]), "/MAGMA_Files/", basename(sumstats_files[1]), ".10UP.1.5DOWN_",pop,"_hgnc.genes.")
-#   # Create block intervals and SNPsea sumstats
-#   smagma <- data.table::fread(sumstats_files[1])
-#   suldsc <- data.table::fread(sumstats_files[2])
-#   #ssnpse <- data.table::fread(sumstats_files[3])
-#   cat("Roughly these many SNPs per block in the MAGMA sumstats:", ceiling(nrow(smagma)/n_blocks), "\n")
-#   chunker <- function(x, n) split(x, cut(seq_along(x), n, labels = FALSE)) # taken from: https://stackoverflow.com/questions/3318333/split-a-vector-into-chunks
-#   blocks <- chunker(1:nrow(smagma), n_blocks)
-#   margins_list <- list()
-#   for (i in 1:n_blocks) {
-#     cat("Doing block", i, "of", n_blocks,"\n")
-#     stto <- smagma$SNP[blocks[[i]]] # stto stands for SnpsToTakeOut
-#     
-#     sumstats_ldsc_s <- suldsc[!(suldsc$SNP %in% stto),]
-#     data.table::fwrite(sumstats_ldsc_s, sep = "\t", file = paste0(output_dir, "/ldsc_block_", i, ".gwas.gz"))
-#     
-#     ssnpse_s <- ssnpse[!(ssnpse$SNP %in% stto),]
-#     if (nrow(ssnpse_s) < nrow(ssnpse)) data.table::fwrite(ssnpse_s, sep = "\t", file = paste0(output_dir, "/snps_block_", i, ".gwas"))
-#     
-#     # Retain the basepair region taken out, and write it to a separate file so that we can also later take out genes from the gene-set that is tested for enrichment (if said genes completely span the basepair-region).
-#     lidx <- blocks[[i]][1]
-#     ridx <- blocks[[i]][length(blocks[[i]])]
-#     margins <- as.data.frame(do.call("cbind", list(smagma[lidx,c("CHR", "BP")],
-#                                                    smagma[ridx,c("CHR", "BP")],
-#                                                    max(smagma$BP[smagma$CHR == smagma$CHR[lidx]]),
-#                                                    min(smagma$BP[smagma$CHR == smagma$CHR[ridx]]),
-#                                                    i
-#     )))
-#     colnames(margins) <- c("LCHR", "LBP", "RCHR", "RBP", "LMAX", "RMIN", "BLOCK")
-#     margins_list[[i]] <- margins
-#   }
-#   margins_df <- do.call("rbind", margins_list)
-#   data.table::fwrite(margins_df, sep = "\t", file = paste0(output_dir, "/blockintervals.tsv"))
-#   rm(margins_list, smagma, ssnpse, ssnpse_s, suldsc, margins_df, margins, lidx, ridx, stto, i, chunker, blocks); gc()
-#   bi <- as.data.frame(data.table::fread(paste0(output_dir, "/blockintervals.tsv")))
-#   outf <- as.data.frame(data.table::fread(paste0(magma_files_prefix, "out")))
-#   annotf <- readLines(paste0(magma_files_prefix, "annot"))
-#   annot_genes <- unlist(lapply(strsplit(annotf, "\t", fixed = TRUE), "[[", 1)) # this is an index for the genes in annotf
-#   gtto <- list() # list of GenesToTakeOut
-#   for (i in 1:n_blocks) {
-#     cat("doing block",i,"of",n_blocks,"\n")
-#     # Determine the genes that need to be taken out from this block
-#     region <- bi[bi$BLOCK==i,]
-#     genes_to_take_out <- vector()
-#     if (region$LCHR == region$RCHR) { # Then this isn't a block that spans two chromosomes.
-#       genes_to_take_out <- outf$GENE[outf$CHR == region$LCHR & outf$START >= region$LBP & outf$STOP <= region$RBP]
-#     } else { # Then this is a block that spans two chromosomes.
-#       genes_to_take_out <- outf$GENE[(outf$CHR == region$LCHR & outf$START >= region$LBP) | 
-#                                        (outf$CHR == region$RCHR & outf$STOP <= region$RBP)]
-#     }
-#     if (i == 1) {genes_to_take_out <- genes_to_take_out[2:length(genes_to_take_out)]} # this is a temporary solution to the ncol!=col_used bug from MAGMA v1.09b, from their geneinput.cpp file on lines 38 and 56; if you leave the first gene (with just one SNP) in, then it runs the block just fine.
-#     gtto[[i]] <- genes_to_take_out
-#   }
-#   saveRDS(gtto, paste0(output_dir, "/gtto.rds"))
-#   throw <- lapply(1:n_blocks, function(idx) {
-#     writeLines(text = gtto[[idx]], con = paste0(output_dir, "/gtto_", idx, ".txt"), sep = "\n")
-#   })
-#   rm(bi, outf, annotf, annot_genes, region, throw, genes_to_take_out); gc()
-#   
-#   compute_MAGMA_enrichment_discrete_blocked <- function(gene_sets, block_gtto_path = NULL, output_dir, sumstats_file, upstream_kb = 10, 
-#                                                         downstream_kb = 1.5, gene_nomenclature = "hgnc", population = "eur",
-#                                                         gwas_sample_size = NULL,
-#                                                         genome_ref_path = paste0(system.file(package = "gwascelltyper"), "/extdata/g1000_", population),
-#                                                         magma_path = paste0(system.file(package = "gwascelltyper"), "/extdata/magma")) {
-#     if (!is.null(block_gtto_path)) {if (!file.exists(block_gtto_path)) {stop(paste0("block_gtto_path does not exist: ", block_gtto_path))}}
-#     if (is.null(gene_sets)) {
-#       stop("What gene sets?")
-#     }
-#     if (is.null(sumstats_file)) {
-#       stop("What sumstats file?")
-#     }
-#     if (is.null(genome_ref_path)) {
-#       stop("What MAGMA input genome_ref_path param?")
-#     }
-#     if (!file.exists(sumstats_file)) {
-#       stop("GWAS summary statistics file doesn't exist.")
-#     }
-#     prefix <- get_magma_paths(sumstats_file, upstream_kb, downstream_kb, population, gene_nomenclature)
-#     if (!(file.exists(paste0(prefix, ".genes.annot")) &
-#           file.exists(paste0(prefix, ".genes.out")) &
-#           file.exists(paste0(prefix, ".genes.raw")))) {
-#       stop(".genes.annot file containing the mapping of SNPs (from the supplied sumstats file) to genes not found.")
-#     }
-#     
-#     sumstats_file = path.expand(sumstats_file)
-#     analysis_name = basename(block_gtto_path)
-#     
-#     if ("All_genes_control" %in% names(gene_sets)) {
-#       cat("Removing geneset called 'All_genes_control', as this is a competitive analysis (not self-contained).\n")
-#       gene_sets <- gene_sets[-which(names(gene_sets) == "All_genes_control")]
-#     }
-#     
-#     cat("Generating gene_covars.\n")
-#     geneCovarFile_contents <- NULL
-#     for (set in 1:length(gene_sets)) {
-#       if (length(gene_sets[[set]]) == 0) 
-#         stop(paste0("Gene set #", set, " doesn't contain any gene."))
-#       cat("Geneset ", names(gene_sets)[set], " contains ", 
-#           length(gene_sets[[set]]), " genes.\n")
-#       geneCovarFile_contents[set] <- paste0(names(gene_sets)[set], " ", paste(gene_sets[[set]], collapse = " "))
-#     }
-#     geneCovarFile = tempfile(pattern = "geneCovarFile", tmpdir = output_dir)
-#     cat("Writing gene_covar file to", geneCovarFile, "\n")
-#     write.table(geneCovarFile_contents, file = geneCovarFile, 
-#                 quote = FALSE, row.names = FALSE, sep = "\t", col.names = FALSE)
-#     cat("Making sure MAGMA is chmod +x.\n")
-#     system(paste0("chmod +x ", magma_path))
-#     magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s' --settings gene-exclude='%s'", 
-#                         magma_path, prefix, geneCovarFile, output_dir, analysis_name, block_gtto_path)
-#     if (is.null(block_gtto_path)) {
-#       magma_cmd = sprintf("%s --gene-results '%s.genes.raw' --set-annot '%s' --out '%s/%s'", 
-#                           magma_path, prefix, geneCovarFile, output_dir, analysis_name)
-#     }
-#     print(magma_cmd)
-#     invisible(system(magma_cmd, intern=TRUE))
-#     res = read.table(paste0(output_dir, "/", analysis_name, 
-#                             ".gsa.out"), stringsAsFactors = FALSE, header = TRUE)
-#     if ("FULL_NAME" %in% colnames(res)) {
-#       res <- res[, -which(colnames(res) == "VARIABLE")]
-#       colnames(res)[which(colnames(res) == "FULL_NAME")] <- "Name"
-#       res <- res[, 7:1]
-#       colnames(res)[2] <- "P_value"
-#     } else {
-#       colnames(res)[which(colnames(res) == "VARIABLE")] <- "Name"
-#       colnames(res)[which(colnames(res) == "P")] <- "P_value"
-#       res <- res[, c(1, 7, 2:6)]
-#     }
-#     return(res)
-#   }
-#   
-#   compute_LDSC_enrichment_discrete <- function(ldsc_gs_path, sumstats_file, block, output_dir, population = "eur", ld_wind_cm = 1,
-#                                                ldsc_path = paste0(system.file(package="gwascelltyper"), "/extdata/"),
-#                                                gene_coord = paste0(system.file(package="gwascelltyper"), "/extdata/refGene_coord.txt"),
-#                                                print_snps = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/hapmap3_snps/hm."),
-#                                                bim_prefix = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/1000G_",toupper(population),"_Phase3_plink/1000G.",toupper(population),".QC."),
-#                                                ref_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/1000G_",toupper(population),"_Phase3_baseline/baseline."),
-#                                                w_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/1000G_",toupper(population),"_Phase3_weights_hm3_no_hla/weights.")) {
-#     #sumstats_file=ldsc_sumpath; block=i; population = "eur"; ld_wind_cm = 1; ldsc_path = paste0(system.file(package="gwascelltyper"), "/extdata/"); gene_coord = paste0(system.file(package="gwascelltyper"), "/extdata/refGene_coord_v2.txt"); print_snps = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/hapmap3_snps/hm."); bim_prefix = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/1000G_",toupper(population),"_Phase3_plink/1000G.",toupper(population),".QC."); ref_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/1000G_",toupper(population),"_Phase3_baseline/baseline."); w_ld_chr = paste0(system.file(package="gwascelltyper"), "/extdata/EUR_complete/1000G_",toupper(population),"_Phase3_weights_hm3_no_hla/weights.")
-#     # Checks
-#     if (is.null(sumstats_file)) {stop("What sumstats file?")}
-#     if (!file.exists(sumstats_file)) {stop("GWAS sumstats file does not exist at provided path.")}
-#     # dep_path() already checks the existence of the other required files!
-#     
-#     output_prefix <- paste0(ldsc_gs_path, "/ldsc_final_output_", tools::file_path_sans_ext(basename(sumstats_file), compression = TRUE))
-#     #output_prefix
-#     
-#     cat("LDSC enrichment analysis started at:", as.character(Sys.time()), "\n")
-#     
-#     # This command actually returns the P-values for each celltype against the GWAS trait
-#     print("This command actually returns the P-values for each cell type against the GWAS trait")
-#     command <- paste0("source /users/jostins/ncr155/.bashrc && conda activate /users/jostins/ncr155/.conda/envs/ldsc && OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 python2 ", ldsc_path, "ldsc.py --h2-cts ", sumstats_file,
-#                       " --ref-ld-chr ", ref_ld_chr, " ",
-#                       "--out ", output_prefix, " ",
-#                       "--ref-ld-chr-cts ", ldsc_gs_path, "/main.ldcts ",
-#                       "--w-ld-chr ", w_ld_chr)
-#     print(command)
-#     system(command)
-#     print("Done. Returning results dataframe.")
-#     
-#     # Here we build the results dataframe for plotting.
-#     results <- utils::read.table(paste0(output_prefix, ".cell_type_results.txt"), header = T, stringsAsFactors = FALSE)
-#     colnames(results)[4] <- "P_value"
-#     
-#     # file.remove(paste0(output_prefix, c(".log", ".cell_type_results.txt")))
-#     # Now that the results are read into memory, we're deleting all of the intermediary files the UNIX R way.
-#     return(results)
-#   }
-#   
-#   for (i in 0:200) {
-#     if (i==0) {
-#       gene_sets <- list(GS1=readRDS(gene_sets_path)) # You don't need AllGenesControl
-#       res1 <- compute_MAGMA_enrichment_discrete(gene_sets = gene_sets,
-#                                                 sumstats_file = sumstats_magma,
-#                                                 block_gtto_path = NULL,
-#                                                 gwas_sample_size = gwas_samp_size)
-#       res1$BLOCK = 0
-#       
-#       gene_sets <- list(GS1=readRDS(gene_sets_path), All_genes_control=readRDS("/well/jostins/users/ncr155/work/chp2/simgwas/genes.rds")$gene)
-#       res2 <- compute_SNPSEA_enrichment_discrete(gene_sets = gene_sets,
-#                                                  sumstats_file = sumstats_snpsea)
-#       res2$BLOCK = 0
-#       
-#       ldsc_gs_path <- paste0(dirname(gene_sets_path), "/LDscores/", tools::file_path_sans_ext(basename(gene_sets_path))) # file.exists(paste0(ldsc_gs_path,"/main.ldcts")) # TRUE # dir.exists(ldsc_gs_path) # TRUE
-#       res3 <- compute_LDSC_enrichment_discrete(ldsc_gs_path = ldsc_gs_path,
-#                                                sumstats_file = sumstats_ldsc,
-#                                                block = i)
-#       res3$BLOCK = 0
-#     } else {
-#       # Where are the genes to be excluded?
-#       block_gtto_path <- paste0(output_path[1], "_gtto_", i, ".txt") # all(file.exists(paste0(output_path[1], "_gtto_", 1:200, ".txt")))
-#       # Run MAGMA
-#       res1 <- compute_MAGMA_enrichment_discrete(gene_sets = gene_sets,
-#                                                 sumstats_file = sumstats_magma,
-#                                                 block_gtto_path = block_gtto_path,
-#                                                 gwas_sample_size = gwas_samp_size)
-#       res1$BLOCK = i
-#       
-#       gene_sets <- list(GS1=readRDS(gene_sets_path), All_genes_control=readRDS("/well/jostins/users/ncr155/work/chp2/simgwas/genes.rds")$gene)
-#       snpsea_sumpath <- ifelse(file.exists(paste0(output_path[3], "_", i, ".gwas")), yes = paste0(output_path[3], "_", i, ".gwas"), no = sumstats_snpsea)
-#       gtto <- readRDS(paste0(output_path[1], "_gtto.rds"))
-#       gene_sets2 <- lapply(1:length(gene_sets), function(x) {return(gene_sets[[x]][!gene_sets[[x]] %in% gtto[[i]]])}); names(gene_sets2) <- names(gene_sets)
-#       res2 <- compute_SNPSEA_enrichment_discrete(gene_sets = gene_sets2, sumstats_file = snpsea_sumpath)
-#       res2$BLOCK = i
-#       
-#       ldsc_gs_path <- paste0(dirname(gene_sets_path), "/LDscores/", tools::file_path_sans_ext(basename(gene_sets_path))) # file.exists(paste0(ldsc_gs_path,"/main.ldcts")) # TRUE # dir.exists(ldsc_gs_path) # TRUE
-#       ldsc_sumpath <- ifelse(
-#         file.exists(paste0(output_path[2], "_", i, ".gwas.gz")),
-#         yes = paste0(output_path[2], "_", i, ".gwas.gz"), # it exists, so sumstats are subsampled.
-#         no = sumstats_ldsc
-#       )
-#       res3 <- compute_LDSC_enrichment_discrete(ldsc_gs_path = ldsc_gs_path,
-#                                                sumstats_file = ldsc_sumpath,
-#                                                block = i)
-#       res3$BLOCK = i
-#     }
-#     res1$method = "magma"
-#     res2$method = "ldsc"
-#     #res3$method = "snpsea"
-#     library(dplyr)
-#     res <- do.call("rbind", list(
-#       res1 %>% select(Name, P_value, BLOCK, method),
-#       res2 %>% select(Name, P_value, BLOCK, method)
-#     ))
-#     res$Z <- qnorm(1 - res$P_value) # You can do the qnorm here, see: identical(qnorm(1-c(0.05, 0.1, 0.7))[1:2],qnorm(1-c(0.05, 0.1))) # TRUE
-#   }
-#   
-#   res2 <- data.table::rbindlist(pbapply::pblapply(unique(res$origin), function(J) {
-#     sdf <- res[res$origin==J,]
-#     wds <- sdf %>%
-#       filter(block==0) %>%
-#       arrange(method)
-#     # all(wds$method == colnames(pseudovals)) # TRUE # so you can just remove the same cols
-#     colnames_wds <- wds$method
-#     wds <- matrix(rep(wds$Z, times=num_blocks), nrow=num_blocks, byrow = TRUE)
-#     colnames(wds) <- colnames_wds
-#     delval <- sdf %>%
-#       filter(block!=0) %>%
-#       arrange(method) %>%
-#       select(block, method, Z) %>%
-#       pivot_wider(names_from=method, values_from=Z) %>%
-#       arrange(block) %>%
-#       select(-matches("block"))
-#     pseudovals <- as.matrix(
-#       (wds * num_blocks) - (delval * (num_blocks-1))
-#     )
-#     # !!!!!!!! IMPORTANT
-#     # Sometimes, the blocks give a constant estimate in SNPsea linear
-#     cols_to_keep <- apply(pseudovals, 2, var, na.rm=TRUE) != 0
-#     if (any(is.na(pseudovals[,"snpsea"]))) {cols_to_keep["snpsea"] <- FALSE}
-#     pseudovals <- pseudovals[,cols_to_keep]
-#     wds2 <- wds[,cols_to_keep]
-#     # Fixes the constant estimate issue ^
-#     jknife_cov <- cov(pseudovals)/num_blocks
-#     jknife_cor <- jknife_cov/sqrt(diag(jknife_cov) %*% t(diag(jknife_cov)))
-#     weightss <- rep(1,length(jknife_cor[1,]))/sqrt(sum(jknife_cor))
-#     # weightss <- apply(solve(chol(jknife_cor)),1,sum)/sqrt(length(jknife_cor[1,]))
-#     final <- sum(wds2[1,] * weightss)
-#     ssdf <- rbind(data.frame(Z=wds[1,],method=colnames(wds),origin=J),
-#                   data.frame(Z=final,method="bjk",origin=J))
-#     rownames(ssdf) <- NULL
-#     ssdf$sampsize <- as.numeric(unlist(lapply(strsplit(ssdf$origin, "_"), "[[", 1)))
-#     ssdf$P_value <- pnorm(q=ssdf$Z, lower.tail=FALSE) # Before it was this: and it was buggy ssdf$P_value <- pnorm(-abs(ssdf$Z))
-#     ssdf$signif <- ssdf$P_value < 0.05
-#     ssdf$seed <- factor(unlist(lapply(strsplit(ssdf$origin, "_"), "[[", 2)), levels=as.character(1:num_seeds))
-#     return(ssdf)
-#   }))
-# }
-# 
-# 
+#' @export
+finalStep_bjk_joint_test <- function(mat) {
+  if (any(is.na(mat))) {stop("NAs in mat. Cannot run.")}
+  require(dplyr)
+  require(tidyr)
+  
+  n_blocks <- max(mat$BLOCK, na.rm = TRUE)
+  # Iterate over each gene-set present in this matrix.
+  res <- data.table::rbindlist(pbapply::pblapply(unique(mat$Name), function(J) {
+    sdf <- mat[mat$Name==J,]
+    wds <- sdf %>%
+      filter(BLOCK==0) %>%
+      arrange(method)
+    # all(wds$method == colnames(pseudovals)) # TRUE # so you can just remove the same cols
+    
+    colnames_wds <- wds$method
+    wds <- matrix(rep(wds$Z, times=n_blocks), nrow=n_blocks, byrow = TRUE)
+    colnames(wds) <- colnames_wds
+    delval <- sdf %>%
+      filter(BLOCK!=0) %>%
+      arrange(method) %>%
+      select(BLOCK, method, Z) %>%
+      pivot_wider(names_from=method, values_from=Z) %>%
+      arrange(BLOCK) %>%
+      select(-matches("BLOCK"))
+    pseudovals <- as.matrix((wds * n_blocks) - (delval * (n_blocks-1)))
+    # !!!!!!!! IMPORTANT
+    # Sometimes, the blocks give a constant estimate in SNPsea linear
+    cols_to_keep <- apply(pseudovals, 2, var, na.rm=TRUE) != 0
+    # if (any(is.na(pseudovals[,"snpsea"]))) {cols_to_keep["snpsea"] <- FALSE}
+    pseudovals <- pseudovals[,cols_to_keep]
+    wds2 <- wds[,cols_to_keep]
+    # Fixes the constant estimate issue ^
+    jknife_cov <- cov(pseudovals)/n_blocks
+    jknife_cor <- jknife_cov/sqrt(diag(jknife_cov) %*% t(diag(jknife_cov)))
+    weightss <- rep(1,length(jknife_cor[1,]))/sqrt(sum(jknife_cor))
+    # weightss <- apply(solve(chol(jknife_cor)),1,sum)/sqrt(length(jknife_cor[1,]))
+    final <- sum(wds2[1,] * weightss)
+    ssdf <- rbind(data.frame(Z=wds[1,],method=colnames(wds),Name=J),
+                  data.frame(Z=final,method="bjk",Name=J))
+    rownames(ssdf) <- NULL
+    ssdf$P_value <- pnorm(q=ssdf$Z, lower.tail=FALSE) # Before it was this: and it was buggy ssdf$P_value <- pnorm(-abs(ssdf$Z))
+    return(ssdf)
+  }))
+  
+  return(res)
+}
+
+
+
