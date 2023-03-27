@@ -10,7 +10,7 @@ knitr::opts_chunk$set(
 #  
 #  # once installed:
 #  library("gwascelltyper")
-#  download_dependencies(population = "eur")
+#  download_dependencies(pop = "eur")
 
 ## ----eval=FALSE---------------------------------------------------------------
 #  download.file(url = "https://s3.tebi.io/bjk-vignette/bjk_vignette.tgz",

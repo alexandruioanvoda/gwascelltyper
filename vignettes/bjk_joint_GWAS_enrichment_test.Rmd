@@ -26,7 +26,7 @@ if (!require("gwascelltyper", quietly = TRUE))
 
 # once installed:
 library("gwascelltyper")
-download_dependencies(population = "eur")
+download_dependencies(pop = "eur")
 ```
 
 ## Running the block jackknife test
