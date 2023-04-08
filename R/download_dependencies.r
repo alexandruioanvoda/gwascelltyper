@@ -1,6 +1,6 @@
 #' Detect OS
 #'
-#' Function that outputs "windows", "linux" or "osx" depending on what system it is run on. Created by Will from R-bloggers here: https://www.r-bloggers.com/2015/06/identifying-the-os-from-r/
+#' Function that outputs "windows", "linux" or "osx" ("arm64-osx" or "intel-osx" if it can figure that out) depending on what system it is run on. Created by Will from R-bloggers here: https://www.r-bloggers.com/2015/06/identifying-the-os-from-r/
 #'
 #' @return character vector of size 1
 #'
@@ -9,8 +9,13 @@ get_os <- function() {
   sysinf <- Sys.info()
   if (!is.null(sysinf)){
     os <- sysinf['sysname']
-    if (os == 'Darwin')
-      os <- "osx"
+    if (os == 'Darwin') {
+      if (grepl("arm64", sysinf['machine'])) {
+        os <- "arm64-osx"
+      } else {
+        os <- "intel-osx"
+      }
+    }
   } else { ## mystery machine
     os <- .Platform$OS.type
     if (grepl("^darwin", R.version$os))
@@ -61,7 +66,7 @@ dep_path <- function(pop = c("eur", "afr", "amr", "eas", "sas")[1],
   if (for_which %in% c("all", "magma")) {
     if (get_os()=="linux") {
       deps[["magma_binary"]] <- "magma"
-    } else if (get_os()=="osx") {
+    } else if (get_os() %in% c("osx", "arm64-osx", "intel-osx")) {
       deps[["magma_binary"]] <- "magma"
     } else if (get_os()=="windows") {
       deps[["magma_binary"]] <- "magma.exe"
@@ -76,9 +81,9 @@ dep_path <- function(pop = c("eur", "afr", "amr", "eas", "sas")[1],
   }
   if (for_which %in% c("all", "snpsea")) {
     if (get_os()=="linux") {
-      deps[["snpsea_binary"]] <- "snpsea-linux64"
-    } else if (get_os()=="osx") {
-      deps[["snpsea_binary"]] <- "snpsea-osx"
+      deps[["snpsea_binary"]] <- "snpsea-executable"
+    } else if (get_os() %in% c("osx", "arm64-osx", "intel-osx")) {
+      deps[["snpsea_binary"]] <- "snpsea-executable"
     } else if (get_os()=="windows") {
       deps[["snpsea_binary"]] <- "snpsea.exe"
     }
@@ -225,10 +230,12 @@ download_dependencies <- function(address = paste0(system.file(package="gwascell
         download.file(url = "https://github.com/slowkow/snpsea/blob/master/bin/snpsea-linux64?raw=true",
                       destfile = paste0(address, "snpsea-executable"))
       } else {
-        if (get_os() == "osx") {
-          stop("SNPsea does not have a publicly available executable for OSX, but you can compile the C++ code from https://github.com/slowkow/snpsea\nIt needs to be placed in gwascelltyper/extdata/snpsea-executable")
+        if (get_os() %in% c("osx", "intel-osx") ) {
+          #stop("SNPsea does not have a publicly available executable for OSX, but you can compile the C++ code from https://github.com/slowkow/snpsea\nIt needs to be placed in gwascelltyper/extdata/snpsea-executable")
+          download.file(url="https://s3.tebi.io/bjk-vignette/snpsea-osx",
+                        destfile = paste0(address, "snpsea-executable"))
         } else {
-          stop("gwascelltyper cannot detect operating system properly.")
+          stop("Either your OS is on ARM64, or gwascelltyper cannot detect operating system properly. Please compile SNPsea yourself and put it in the extdata folder of the package.")
         }
       }
     }

@@ -703,7 +703,7 @@ map_SNPs_to_genes_for_MAGMA <- function (sumstats_file, upstream_kb = 10, downst
 #' @export
 compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_dir = NULL, slop = "10e3", number_of_threads = 1,
                                                null_snpsets = 0, min_observations = 100, max_iterations = "1e7", gene_nomenclature = "hgnc",
-                                               snpsea_path = paste0(system.file(package = "gwascelltyper"),"/extdata/snpsea-linux64"),
+                                               snpsea_path = paste0(system.file(package = "gwascelltyper"),"/extdata/snpsea-executable"),
                                                gene_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/NCBIgenes2013_", gene_nomenclature,".bed.gz"),
                                                snp_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/TGP2011.bed.gz"),
                                                null_snps = paste0(system.file(package = "gwascelltyper"),"/extdata/Lango2010.txt.gz")) {
@@ -772,7 +772,7 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
   print("Writing the SNPsea GCT file.")
   utils::write.table(gene_set_matrix, sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE, file = paste0(output_dir, "/gene_set_matrix.gct"))
   # The line underneath adds a necessary header to our file
-  system(paste0("( echo -e '#1.2\n",paste(nrow(gene_set_matrix), ncol(gene_set_matrix)-2, sep = "\t"),"'; cat ",output_dir,"/gene_set_matrix.gct) > ",output_dir,"/tmp && mv ",output_dir,"/tmp ",output_dir,"/gene_set_matrix.gct"))
+  system(paste0("( echo '#1.2\n",paste(nrow(gene_set_matrix), ncol(gene_set_matrix)-2, sep = "\t"),"'; cat ",output_dir,"/gene_set_matrix.gct) > ",output_dir,"/tmp && mv ",output_dir,"/tmp ",output_dir,"/gene_set_matrix.gct"))
   R.utils::gzip(paste0(output_dir,"/gene_set_matrix.gct"), destname=paste0(output_dir,"/gene_set_matrix.gct.gz"), overwrite=TRUE, remove=FALSE)
   
   
@@ -836,7 +836,7 @@ compute_SNPSEA_enrichment_discrete <- function(gene_sets, sumstats_file, output_
 #' @export
 compute_SNPSEA_enrichment_linear <- function(gene_score_matrix, sumstats_file, output_dir = NULL, number_of_threads = 1, slop = "10e3",
                                              null_snpsets = 0, min_observations = 100, max_iterations = "1e7", gene_nomenclature = "hgnc",
-                                             snpsea_path = paste0(system.file(package = "gwascelltyper"),"/extdata/snpsea-linux64"),
+                                             snpsea_path = paste0(system.file(package = "gwascelltyper"),"/extdata/snpsea-executable"),
                                              gene_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/NCBIgenes2013_", gene_nomenclature,".bed.gz"),
                                              snp_intervals = paste0(system.file(package = "gwascelltyper"),"/extdata/TGP2011.bed.gz"),
                                              null_snps = paste0(system.file(package = "gwascelltyper"),"/extdata/Lango2010.txt.gz")) {
@@ -1038,6 +1038,8 @@ gene_object_renamer <- function(gobj) {
 #' @param pop Word describing ancestry of the GWAS data. Relevant so that the proper LD panel will be used (default = eur; alternatives = afr, amr, eas, sas, subpop)
 #' @param n_blocks The number of blocks to split the genome into (default = 200).
 #' @param number_of_threads Number of threads to parallelize over.
+#' @param verbose Should it print the rate of progress? (default = TRUE).
+#' @param extraVerbose Should it print the intermediate commands? Usually for debugging purposes (default = FALSE).
 #'
 #' @import dplyr
 #' @import doParallel
@@ -1054,7 +1056,9 @@ compute_bjk_enrichment_discrete <- function(gene_sets,
                                             output_dir,
                                             pop = "eur",
                                             n_blocks = 200,
-                                            number_of_threads = 1) {
+                                            number_of_threads = 1,
+                                            verbose = TRUE,
+                                            extraVerbose = FALSE) {
   # Check: gene_sets <- geneset; sumstats_files= c("/Users/avoda/Desktop/Packages/NewPackageRepo/example_bjk/magma_CD.gwas", "/Users/avoda/Desktop/Packages/NewPackageRepo/example_bjk/ldsc_CD.gwas.gz"); output_dir = "/Users/avoda/Desktop/Packages/NewPackageRepo/example_bjk/interm"; pop = "eur"; n_blocks = 200; number_of_threads = 1
   # Boilerplate checks
   require(dplyr)
@@ -1302,26 +1306,65 @@ compute_bjk_enrichment_discrete <- function(gene_sets,
   
   # Whole data estimates for
   # LDSC:
-  wds_ldsc <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
-                                                       sumstats_file = sumstats_files[2],
-                                                       number_of_threads = number_of_threads,
-                                                       output_dir = output_dir,
-                                                       block = 0,
-                                                       deps = dep_path(pop, "ldsc"))
+  cat("Running whole data estimates\n")
+  if (extraVerbose) {
+    wds_magm <- compute_MAGMA_enrichment_discrete(gene_sets = gene_sets,
+                                                  sumstats_file = sumstats_files[1],
+                                                  output_dir = output_dir,
+                                                  gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N,
+                                                  deps = dep_path(pop, "magma"))
+    wds_ldsc <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                         sumstats_file = sumstats_files[2],
+                                                         number_of_threads = number_of_threads,
+                                                         output_dir = output_dir,
+                                                         block = 0,
+                                                         deps = dep_path(pop, "ldsc"))
+    wds_snps <- compute_SNPSEA_enrichment_discrete(gene_sets = gene_sets,
+                                                   sumstats_file = sumstats_files[3],
+                                                   output_dir = output_dir,
+                                                   slop = "10e3",
+                                                   number_of_threads = number_of_threads)
+  } else {
+    invisible(capture.output({
+      wds_magm <- compute_MAGMA_enrichment_discrete(gene_sets = gene_sets,
+                                                    sumstats_file = sumstats_files[1],
+                                                    gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N,
+                                                    deps = dep_path(pop, "magma"))
+    }))
+    invisible(capture.output({
+      wds_ldsc <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                           sumstats_file = sumstats_files[2],
+                                                           number_of_threads = number_of_threads,
+                                                           output_dir = output_dir,
+                                                           block = 0,
+                                                           deps = dep_path(pop, "ldsc"))
+    }))
+    invisible(capture.output({
+      wds_snps <- compute_SNPSEA_enrichment_discrete(gene_sets = gene_sets,
+                                                     sumstats_file = sumstats_files[3],
+                                                     output_dir = output_dir,
+                                                     number_of_threads = number_of_threads)
+    }))
+  }
   wds_ldsc$BLOCK = 0
   wds_ldsc$method = "ldsc"
-  # MAGMA:
-  wds_magm <- compute_MAGMA_enrichment_discrete(gene_sets = gene_sets,
-                                                sumstats_file = sumstats_files[1],
-                                                gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N,
-                                                deps = dep_path(pop, "magma"))
   wds_magm$BLOCK = 0
   wds_magm$method = "magma"
-  #wds_snps <- compute_SNPSEA_enrichment_discrete() # To be added later on, when SNPsea is nativised to R or after this issue is fixed: https://github.com/slowkow/snpsea/issues/6.
+  wds_snps$BLOCK = 0
+  wds_snps$method = "snpsea"
+  
+  #wds_snps <- wds_snps[wds_snps$Name!="All_genes_control",]
+  wds_snps$Nulls_observed2 <- wds_snps$Nulls_observed+0.5
+  wds_snps$Nulls_tested2 <- wds_snps$Nulls_tested+1
+  wds_snps$P_value <- wds_snps$Nulls_observed2/wds_snps$Nulls_tested2
+  
+  # #wds_snps <- compute_SNPSEA_enrichment_discrete() # To be added later on, when SNPsea is nativised to R or after this issue is fixed: https://github.com/slowkow/snpsea/issues/6.
+  
   require(dplyr)
   res <- do.call("rbind", list(
     wds_magm %>% select(Name, P_value, BLOCK, method),
-    wds_ldsc %>% select(Name, P_value, BLOCK, method)
+    wds_ldsc %>% select(Name, P_value, BLOCK, method),
+    wds_snps %>% select(Name, P_value, BLOCK, method)
   ))
   res$Z <- qnorm(1 - res$P_value)
   saveRDS(res, paste0(output_dir, "/res_0.rds"))
@@ -1331,17 +1374,22 @@ compute_bjk_enrichment_discrete <- function(gene_sets,
   # Create block intervals and SNPsea sumstats
   smagma <- data.table::fread(sumstats_files[1])
   suldsc <- data.table::fread(sumstats_files[2])
-  #ssnpse <- data.table::fread(sumstats_files[3])
+  ssnpse <- data.table::fread(sumstats_files[3])
   cat("Roughly these many SNPs per block in the MAGMA sumstats:", ceiling(nrow(smagma)/n_blocks), "\n")
   chunker <- function(x, n) split(x, cut(seq_along(x), n, labels = FALSE)) # taken from: https://stackoverflow.com/questions/3318333/split-a-vector-into-chunks
   blocks <- chunker(1:nrow(smagma), n_blocks)
   margins_list <- list()
   for (i in 1:n_blocks) {
-    cat("Doing block", i, "of", n_blocks,"\n")
+    if (verbose) cat("Finding margins of block", i, "of", n_blocks,"\n")
     stto <- smagma$SNP[blocks[[i]]] # stto stands for SnpsToTakeOut
     
     sumstats_ldsc_s <- suldsc[!(suldsc$SNP %in% stto),]
     data.table::fwrite(sumstats_ldsc_s, sep = "\t", file = paste0(output_dir, "/ldsc_block_", i, ".gwas.gz"))
+    
+    ssnpse_s <- ssnpse[!(ssnpse$SNP %in% stto),]
+    if (nrow(ssnpse_s) < nrow(ssnpse)) {
+      data.table::fwrite(ssnpse_s, sep = "\t", file = paste0(output_dir, "/snpsea_block_", i, ".gwas"))
+    }
     
     # Retain the basepair region taken out, and write it to a separate file so that we can also later take out genes from the gene-set that is tested for enrichment (if said genes completely span the basepair-region).
     lidx <- blocks[[i]][1]
@@ -1364,7 +1412,7 @@ compute_bjk_enrichment_discrete <- function(gene_sets,
   annot_genes <- unlist(lapply(strsplit(annotf, "\t", fixed = TRUE), "[[", 1)) # this is an index for the genes in annotf
   gtto <- list() # list of GenesToTakeOut
   for (i in 1:n_blocks) {
-    cat("doing block",i,"of",n_blocks,"\n")
+    if (verbose) cat("Extracting genes from within block",i,"of",n_blocks,"\n")
     # Determine the genes that need to be taken out from this block
     region <- bi[bi$BLOCK==i,]
     genes_to_take_out <- vector()
@@ -1392,11 +1440,22 @@ compute_bjk_enrichment_discrete <- function(gene_sets,
     require(foreach)
     doParallel::registerDoParallel(cores=number_of_threads)
     foreach::foreach(i=1:n_blocks, .options.snow=list(preschedule=TRUE)) %dopar% {
-      res1 <- compute_MAGMA_enrichment_discrete_blocked(gene_sets = gene_sets,
-                                                        sumstats_file = sumstats_files[1],
-                                                        output_dir = output_dir,
-                                                        block_gtto_path = paste0(output_dir, "/gtto_", i, ".txt"),
-                                                        gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N)
+      
+      if (extraVerbose) {
+        res1 <- compute_MAGMA_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                          sumstats_file = sumstats_files[1],
+                                                          output_dir = output_dir,
+                                                          block_gtto_path = paste0(output_dir, "/gtto_", i, ".txt"),
+                                                          gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N)
+      } else {
+        invisible(capture.output({
+          res1 <- compute_MAGMA_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                            sumstats_file = sumstats_files[1],
+                                                            output_dir = output_dir,
+                                                            block_gtto_path = paste0(output_dir, "/gtto_", i, ".txt"),
+                                                            gwas_sample_size = data.table::fread(sumstats_files[2], nrows = 1)$N)
+        }))
+      }
       res1$BLOCK = i
       res1$method = "magma"
       
@@ -1405,20 +1464,52 @@ compute_bjk_enrichment_discrete <- function(gene_sets,
         yes = paste0(output_dir,"/ldsc_block_", i, ".gwas.gz"), # it exists, so sumstats are subsampled.
         no = sumstats_files[2]
       )
-      res2 <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
-                                                       sumstats_file = ldsc_blk_sumpath,
-                                                       output_dir = output_dir,
-                                                       number_of_threads = 1,
-                                                       window_size = 100000,
-                                                       block = i,
-                                                       pop = "eur", ld_wind_cm = 1,
-                                                       deps = dep_path(pop, "ldsc"))
+      if (extraVerbose) {
+        res2 <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                         sumstats_file = ldsc_blk_sumpath,
+                                                         output_dir = output_dir,
+                                                         number_of_threads = 1,
+                                                         window_size = 100000,
+                                                         block = i,
+                                                         pop = "eur", ld_wind_cm = 1,
+                                                         deps = dep_path(pop, "ldsc"))
+      } else {
+        invisible(capture.output({
+          res2 <- compute_LDSC_enrichment_discrete_blocked(gene_sets = gene_sets,
+                                                           sumstats_file = ldsc_blk_sumpath,
+                                                           output_dir = output_dir,
+                                                           number_of_threads = 1,
+                                                           window_size = 100000,
+                                                           block = i,
+                                                           pop = "eur", ld_wind_cm = 1,
+                                                           deps = dep_path(pop, "ldsc"))
+        }))
+      }
       res2$BLOCK = i
       res2$method = "ldsc"
       
+      snpsea_sumpath <- ifelse(file.exists(paste0(output_dir, "/ldsc_block_", i, ".gwas.gz")), yes = paste0(output_dir, "/ldsc_block_", i, ".gwas.gz"), no = sumstats_files[3])
+      gtto <- readRDS(paste0(output_dir, "/gtto.rds"))
+      gene_sets2 <- lapply(1:length(gene_sets), function(x) {return(gene_sets[[x]][!gene_sets[[x]] %in% gtto[[i]]])}); names(gene_sets2) <- names(gene_sets)
+      if (extraVerbose) { 
+        res3 <- compute_SNPSEA_enrichment_discrete(gene_sets = gene_sets2,
+                                                   sumstats_file = snpsea_sumpath,
+                                                   output_dir = output_dir,
+                                                   number_of_threads = number_of_threads)
+      } else {
+        invisible(capture.output({
+          res3 <- compute_SNPSEA_enrichment_discrete(gene_sets = gene_sets2,
+                                                     sumstats_file = snpsea_sumpath,
+                                                     output_dir = output_dir,
+                                                     number_of_threads = number_of_threads)
+        }))
+      }
+      res3$BLOCK = i
+      
       res <- do.call("rbind", list(
         res1 %>% select(Name, P_value, BLOCK, method),
-        res2 %>% select(Name, P_value, BLOCK, method)
+        res2 %>% select(Name, P_value, BLOCK, method),
+        res3 %>% select(Name, P_value, BLOCK, method)
       ))
       res$Z <- qnorm(1 - res$P_value) # You can do the qnorm here, see: identical(qnorm(1-c(0.05, 0.1, 0.7))[1:2],qnorm(1-c(0.05, 0.1))) # TRUE
       saveRDS(res, paste0(output_dir, "/res_", i, ".rds"))
